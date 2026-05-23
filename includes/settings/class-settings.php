@@ -40,6 +40,11 @@ final class Settings {
 		'authority_opinion_cat' => 'opinion',   // category slug → opinion tier
 		'authority_wire_tags'   => 'wire,ap',   // comma-separated tag slugs → wire tier
 		'wpvdb_integration'     => true,        // auto-route search through WPVDB when present
+		// Price per million tokens (USD). Defaults track Anthropic's
+		// Claude Sonnet 4.5 ($3 input / $15 output). Edit these when
+		// you switch models — Opus and Haiku cost very differently.
+		'cost_prompt_per_million'     => 3.0,
+		'cost_completion_per_million' => 15.0,
 	);
 
 	public static function register(): void {
@@ -134,6 +139,14 @@ final class Settings {
 			// Unchecked checkboxes don't submit a key — explicit false when
 			// the form was submitted but the toggle is off.
 			$out['wpvdb_integration'] = false;
+		}
+
+		if ( array_key_exists( 'cost_prompt_per_million', $input ) ) {
+			$out['cost_prompt_per_million'] = max( 0.0, (float) $input['cost_prompt_per_million'] );
+		}
+
+		if ( array_key_exists( 'cost_completion_per_million', $input ) ) {
+			$out['cost_completion_per_million'] = max( 0.0, (float) $input['cost_completion_per_million'] );
 		}
 
 		return $out;

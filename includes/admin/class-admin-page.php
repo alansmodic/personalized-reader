@@ -199,6 +199,30 @@ final class Admin_Page {
 			array( $this, 'field_checkbox' ),
 			__( 'When WPVDB is active, route search and recommendation queries through its vector index. Has no effect when WPVDB is not installed.', 'personalized-reader' )
 		);
+
+		add_settings_section(
+			'pr_section_cost',
+			__( 'Cost estimation', 'personalized-reader' ),
+			static function (): void {
+				echo '<p>' . esc_html__( 'Prices per million tokens, in USD. Used only to compute the estimated-cost column on this page — not billed by us. Edit when you switch models.', 'personalized-reader' ) . '</p>';
+				echo '<p class="description">' . esc_html__( 'Common Anthropic prices (as of mid-2026): Claude Sonnet 4.5 — $3 in / $15 out · Claude Opus 4.7 — $15 in / $75 out · Claude Haiku 4.5 — $1 in / $5 out.', 'personalized-reader' ) . '</p>';
+			},
+			self::MENU_SLUG
+		);
+
+		$this->add_field(
+			'cost_prompt_per_million',
+			__( 'Price per million prompt tokens ($)', 'personalized-reader' ),
+			'pr_section_cost',
+			array( $this, 'field_decimal' )
+		);
+
+		$this->add_field(
+			'cost_completion_per_million',
+			__( 'Price per million completion tokens ($)', 'personalized-reader' ),
+			'pr_section_cost',
+			array( $this, 'field_decimal' )
+		);
 	}
 
 	private function add_field( string $key, string $label, string $section, callable $render, string $help = '' ): void {
@@ -245,6 +269,16 @@ final class Admin_Page {
 			esc_attr( Settings::OPTION_NAME ),
 			esc_attr( $key ),
 			$value
+		);
+	}
+
+	public function field_decimal( string $key ): void {
+		$value = (float) Settings::get( $key );
+		printf(
+			'<input type="number" min="0" step="0.01" name="%s[%s]" value="%s" />',
+			esc_attr( Settings::OPTION_NAME ),
+			esc_attr( $key ),
+			esc_attr( number_format( $value, 2, '.', '' ) )
 		);
 	}
 
@@ -408,6 +442,16 @@ final class Admin_Page {
 	private function render_usage(): void {
 		$totals     = Usage_Tracker::totals();
 		$this_month = Usage_Tracker::this_month();
+
+		$cost_in  = (float) Settings::get( 'cost_prompt_per_million' );
+		$cost_out = (float) Settings::get( 'cost_completion_per_million' );
+
+		$estimate = static function ( array $bucket ) use ( $cost_in, $cost_out ): string {
+			$usd = ( (int) $bucket['prompt_tokens']     / 1_000_000 ) * $cost_in
+			     + ( (int) $bucket['completion_tokens'] / 1_000_000 ) * $cost_out;
+			// Show 4 decimals so single-turn pennies don't read as $0.00.
+			return '$' . number_format( $usd, 4, '.', ',' );
+		};
 		?>
 		<table class="widefat striped" style="max-width: 720px;">
 			<thead>
@@ -417,6 +461,7 @@ final class Admin_Page {
 					<th><?php esc_html_e( 'Prompt tokens', 'personalized-reader' ); ?></th>
 					<th><?php esc_html_e( 'Completion tokens', 'personalized-reader' ); ?></th>
 					<th><?php esc_html_e( 'Total tokens', 'personalized-reader' ); ?></th>
+					<th><?php esc_html_e( 'Est. cost', 'personalized-reader' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -426,6 +471,7 @@ final class Admin_Page {
 					<td><?php echo esc_html( number_format_i18n( (int) $this_month['prompt_tokens'] ) ); ?></td>
 					<td><?php echo esc_html( number_format_i18n( (int) $this_month['completion_tokens'] ) ); ?></td>
 					<td><?php echo esc_html( number_format_i18n( (int) $this_month['total_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( $estimate( $this_month ) ); ?></td>
 				</tr>
 				<tr>
 					<td><strong><?php esc_html_e( 'All time', 'personalized-reader' ); ?></strong></td>
@@ -433,11 +479,19 @@ final class Admin_Page {
 					<td><?php echo esc_html( number_format_i18n( (int) $totals['prompt_tokens'] ) ); ?></td>
 					<td><?php echo esc_html( number_format_i18n( (int) $totals['completion_tokens'] ) ); ?></td>
 					<td><?php echo esc_html( number_format_i18n( (int) $totals['total_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( $estimate( $totals ) ); ?></td>
 				</tr>
 			</tbody>
 		</table>
 		<p class="description">
-			<?php esc_html_e( 'Token counts are summed across every conversation turn the agent runs. "Sessions" counts each completed Loop::run call, not unique visitors.', 'personalized-reader' ); ?>
+			<?php
+			printf(
+				/* translators: %1$s prompt price, %2$s completion price */
+				esc_html__( 'Estimated cost is computed from your configured prices below (currently $%1$s per million prompt tokens, $%2$s per million completion tokens). Update those when you switch models. Token counts are summed across every conversation turn; "sessions" counts each completed Loop::run, not unique visitors.', 'personalized-reader' ),
+				number_format( $cost_in, 2 ),
+				number_format( $cost_out, 2 )
+			);
+			?>
 		</p>
 		<?php
 	}
