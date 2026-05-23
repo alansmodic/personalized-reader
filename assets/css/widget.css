@@ -1,0 +1,289 @@
+/*
+ * Personalized Reader widget styles.
+ *
+ * Scoped under .pr-widget so it can drop into any theme without leaking.
+ * Uses currentColor + system fonts so the publisher's typography wins by
+ * default. Override anything via CSS custom properties below.
+ */
+
+/* When the block uses wide or full alignment, let the inline widget
+   actually use that space instead of capping at the base max-width. The
+   block wrapper carries the alignwide/alignfull class; we cascade into
+   the .pr-widget child. The floating variant ignores alignment — it's
+   already positioned absolutely. */
+.alignwide > .pr-widget--inline,
+.alignfull > .pr-widget--inline {
+	max-width: none;
+	width: 100%;
+}
+
+.pr-widget {
+	--pr-bg:           #fff;
+	--pr-fg:           #1a1a1a;
+	--pr-muted:        #5b5b5b;
+	--pr-border:       #e3e3e3;
+	--pr-accent:       #1d4ed8;
+	--pr-user-bg:      #f1f5fb;
+	--pr-assistant-bg: #fafafa;
+	--pr-radius:       8px;
+
+	display: flex;
+	flex-direction: column;
+	max-width: 640px;
+	border: 1px solid var(--pr-border);
+	border-radius: var(--pr-radius);
+	background: var(--pr-bg);
+	color: var(--pr-fg);
+	font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.pr-widget__messages {
+	flex: 1 1 auto;
+	max-height: 480px;
+	overflow-y: auto;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.pr-widget__message {
+	padding: 10px 12px;
+	border-radius: 6px;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.pr-widget__message--user {
+	background: var(--pr-user-bg);
+	align-self: flex-end;
+	max-width: 85%;
+}
+
+.pr-widget__message--assistant {
+	background: var(--pr-assistant-bg);
+	align-self: flex-start;
+	max-width: 95%;
+}
+
+/* Markdown elements rendered inside assistant messages. */
+.pr-widget__message--assistant p {
+	margin: 0 0 8px;
+}
+.pr-widget__message--assistant p:last-child { margin-bottom: 0; }
+
+.pr-widget__message--assistant a {
+	color: var(--pr-accent);
+	text-decoration: underline;
+}
+.pr-widget__message--assistant a:hover { text-decoration: none; }
+
+.pr-widget__message--assistant ul,
+.pr-widget__message--assistant ol {
+	margin: 0 0 8px;
+	padding-left: 22px;
+}
+
+.pr-widget__message--assistant li { margin-bottom: 2px; }
+
+.pr-widget__message--assistant blockquote {
+	margin: 0 0 8px;
+	padding: 6px 10px;
+	border-left: 3px solid var(--pr-border);
+	color: var(--pr-muted);
+}
+
+.pr-widget__message--assistant code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+	background: rgba(0, 0, 0, 0.05);
+	padding: 1px 4px;
+	border-radius: 3px;
+}
+
+.pr-widget__message--assistant strong { font-weight: 600; }
+.pr-widget__message--assistant em     { font-style: italic; }
+
+.pr-widget__message--system {
+	background: transparent;
+	color: var(--pr-muted);
+	font-size: 13px;
+	font-style: italic;
+	align-self: center;
+}
+
+.pr-widget__citations {
+	margin: 10px 0 0;
+	padding: 8px 0 0;
+	border-top: 1px solid var(--pr-border);
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 13px;
+}
+
+.pr-widget__citations li {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.pr-widget__citations a {
+	color: var(--pr-accent);
+	text-decoration: none;
+}
+
+.pr-widget__citations a:hover { text-decoration: underline; }
+
+.pr-widget__authority {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--pr-muted);
+}
+
+.pr-widget__authority--opinion           { color: #8a5a00; }
+.pr-widget__authority--wire              { color: #555; }
+.pr-widget__authority--original-reporting { color: #1d4ed8; }
+
+.pr-widget__form {
+	display: flex;
+	gap: 8px;
+	padding: 12px;
+	border-top: 1px solid var(--pr-border);
+}
+
+.pr-widget__input {
+	flex: 1 1 auto;
+	padding: 10px 12px;
+	border: 1px solid var(--pr-border);
+	border-radius: 6px;
+	font: inherit;
+	color: inherit;
+	background: var(--pr-bg);
+}
+
+.pr-widget__input:focus {
+	outline: 2px solid var(--pr-accent);
+	outline-offset: -1px;
+}
+
+.pr-widget__submit {
+	padding: 10px 16px;
+	border: 0;
+	border-radius: 6px;
+	background: var(--pr-accent);
+	color: #fff;
+	font: inherit;
+	cursor: pointer;
+}
+
+.pr-widget__submit[disabled] {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* Spinner: three dots with a staggered fade. role="status" + aria-label
+   on the parent handles the screen-reader announcement. */
+.pr-widget__spinner {
+	align-self: flex-start;
+	display: inline-flex;
+	gap: 4px;
+	padding: 8px 12px;
+}
+
+.pr-widget__spinner-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--pr-muted);
+	opacity: 0.3;
+	animation: pr-spinner-pulse 1.2s ease-in-out infinite;
+}
+
+.pr-widget__spinner-dot:nth-child(2) { animation-delay: 0.15s; }
+.pr-widget__spinner-dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes pr-spinner-pulse {
+	0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+	40%           { opacity: 1;   transform: scale(1);    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pr-widget__spinner-dot { animation: none; opacity: 0.6; }
+}
+
+/* Floating mode: a fixed-position launcher button and a slide-up panel.
+   Inline mode is the default and ignores everything below. */
+
+.pr-widget--floating {
+	position: fixed;
+	right: 20px;
+	bottom: 20px;
+	z-index: 9999;
+	max-width: none;
+	border: 0;
+	background: transparent;
+}
+
+.pr-widget__launcher {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 56px;
+	height: 56px;
+	border: 0;
+	border-radius: 50%;
+	background: var(--pr-accent);
+	color: #fff;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+	cursor: pointer;
+	transition: transform 0.15s ease;
+}
+
+.pr-widget__launcher:hover { transform: scale(1.05); }
+.pr-widget__launcher:focus { outline: 2px solid var(--pr-accent); outline-offset: 2px; }
+
+.pr-widget__panel {
+	position: absolute;
+	right: 0;
+	bottom: 72px;
+	width: min(380px, calc(100vw - 40px));
+	max-height: min(560px, calc(100vh - 120px));
+	background: var(--pr-bg);
+	border: 1px solid var(--pr-border);
+	border-radius: var(--pr-radius);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.pr-widget__panel[hidden] { display: none; }
+
+.pr-widget__panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--pr-border);
+	background: var(--pr-assistant-bg);
+}
+
+.pr-widget__panel-title {
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.pr-widget__close {
+	border: 0;
+	background: transparent;
+	color: var(--pr-muted);
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 4px;
+}
+
+.pr-widget__close:hover { color: var(--pr-fg); }

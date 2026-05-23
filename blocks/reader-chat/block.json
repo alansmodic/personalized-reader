@@ -1,0 +1,28 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "personalized-reader/reader-chat",
+	"title": "Reader Chat",
+	"category": "widgets",
+	"icon": "format-chat",
+	"description": "Conversational guide to the publication archive.",
+	"textdomain": "personalized-reader",
+	"keywords": [ "chat", "ai", "assistant", "reader" ],
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ]
+	},
+	"attributes": {
+		"mode": {
+			"type": "string",
+			"enum": [ "inline", "floating", "default" ],
+			"default": "default"
+		},
+		"placeholder": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"editorScript": "file:./edit.js",
+	"editorStyle": "file:./editor.css"
+}
