@@ -160,12 +160,15 @@
 		var text = ( this.inputEl.value || '' ).trim();
 		if ( ! text ) return;
 		this.inputEl.value = '';
-		this.setBusy( true );
 
+		// Render the user's message FIRST, then flip busy — that way the
+		// spinner element appended by setBusy() lands below the question
+		// in document order instead of above it.
 		this.appendMessage( 'user', text );
 		this.pendingAssist     = null;
 		this.pendingAssistText = '';
 		this.citations         = [];
+		this.setBusy( true );
 
 		var body = {
 			session_token: this.sessionToken || '',
