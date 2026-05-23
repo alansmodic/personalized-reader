@@ -526,19 +526,29 @@
 	}
 
 	/**
-	 * Inline tokenizer: walks the string and emits text nodes + <a>, <strong>,
-	 * <em>, <code> elements. We process the highest-priority pattern first
-	 * (links) so [text](url) doesn't get partially eaten by bold/italic.
+	 * Inline tokenizer: walks the string and emits text nodes + <a>,
+	 * <strong>, <em>, <code> elements.
+	 *
+	 * Layering, outermost to innermost:
+	 *
+	 *   code → bold → italic → links → text
+	 *
+	 * Each layer extracts its own tokens and recurses INTO the matched
+	 * region with the next layer down. That ordering lets bold wrap a
+	 * link ("**[Title](url)**" — common in LLM output) without leaving
+	 * the `**` markers stranded around the rendered <a> element.
+	 *
+	 * Code spans stay outermost because their content is opaque to
+	 * everything else — `**not bold**` inside backticks must render
+	 * literally.
 	 */
 	function renderInlineInto( parent, text ) {
-		// Anything inside `` `…` `` is treated atomically — we extract code
-		// spans, hand the surrounding text to the next phase, then re-insert.
 		var codeRe = /`([^`\n]+)`/g;
 		var lastIdx = 0;
 		var match;
 		while ( ( match = codeRe.exec( text ) ) !== null ) {
 			if ( match.index > lastIdx ) {
-				renderLinksInto( parent, text.slice( lastIdx, match.index ) );
+				renderBoldInto( parent, text.slice( lastIdx, match.index ) );
 			}
 			var codeEl = document.createElement( 'code' );
 			codeEl.textContent = match[ 1 ];
@@ -546,44 +556,14 @@
 			lastIdx = match.index + match[ 0 ].length;
 		}
 		if ( lastIdx < text.length ) {
-			renderLinksInto( parent, text.slice( lastIdx ) );
+			renderBoldInto( parent, text.slice( lastIdx ) );
 		}
 	}
 
-	function renderLinksInto( parent, text ) {
-		// [text](url) — only http(s) and relative URLs are accepted so a
-		// hostile model can't slip a javascript: link past us.
-		var linkRe = /\[([^\]]+)\]\(([^)\s]+)\)/g;
-		var lastIdx = 0;
-		var match;
-		while ( ( match = linkRe.exec( text ) ) !== null ) {
-			if ( match.index > lastIdx ) {
-				renderEmphasisInto( parent, text.slice( lastIdx, match.index ) );
-			}
-			var url = match[ 2 ];
-			if ( /^(https?:\/\/|\/)/i.test( url ) ) {
-				var a = document.createElement( 'a' );
-				a.href = url;
-				a.rel  = 'noopener';
-				a.target = '_blank';
-				renderEmphasisInto( a, match[ 1 ] );
-				parent.appendChild( a );
-			} else {
-				// Untrusted URL scheme — render as plain text so it's still
-				// visible but not clickable.
-				parent.appendChild( document.createTextNode( match[ 0 ] ) );
-			}
-			lastIdx = match.index + match[ 0 ].length;
-		}
-		if ( lastIdx < text.length ) {
-			renderEmphasisInto( parent, text.slice( lastIdx ) );
-		}
-	}
-
-	function renderEmphasisInto( parent, text ) {
-		// Bold first (double markers), then italic. Greedy matching with a
-		// non-greedy inner so **a** **b** stays as two spans.
-		var boldRe = /(\*\*|__)([^*_\n][^\n]*?)\1/g;
+	function renderBoldInto( parent, text ) {
+		// Greedy matching with a non-greedy inner so `**a** **b**` stays
+		// as two spans.
+		var boldRe = /(\*\*|__)([^\n]+?)\1/g;
 		var lastIdx = 0;
 		var match;
 		while ( ( match = boldRe.exec( text ) ) !== null ) {
@@ -601,16 +581,44 @@
 	}
 
 	function renderItalicInto( parent, text ) {
-		var italRe = /(\*|_)([^*_\s][^*_\n]*?)\1/g;
+		var italRe = /(?<![*_])(\*|_)([^*_\s][^*_\n]*?)\1(?![*_])/g;
 		var lastIdx = 0;
 		var match;
 		while ( ( match = italRe.exec( text ) ) !== null ) {
 			if ( match.index > lastIdx ) {
-				parent.appendChild( document.createTextNode( text.slice( lastIdx, match.index ) ) );
+				renderLinksInto( parent, text.slice( lastIdx, match.index ) );
 			}
 			var em = document.createElement( 'em' );
-			em.textContent = match[ 2 ];
+			renderLinksInto( em, match[ 2 ] );
 			parent.appendChild( em );
+			lastIdx = match.index + match[ 0 ].length;
+		}
+		if ( lastIdx < text.length ) {
+			renderLinksInto( parent, text.slice( lastIdx ) );
+		}
+	}
+
+	function renderLinksInto( parent, text ) {
+		// [text](url) — only http(s) and relative URLs are accepted so a
+		// hostile model can't slip a `javascript:` link past us.
+		var linkRe = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+		var lastIdx = 0;
+		var match;
+		while ( ( match = linkRe.exec( text ) ) !== null ) {
+			if ( match.index > lastIdx ) {
+				parent.appendChild( document.createTextNode( text.slice( lastIdx, match.index ) ) );
+			}
+			var url = match[ 2 ];
+			if ( /^(https?:\/\/|\/)/i.test( url ) ) {
+				var a = document.createElement( 'a' );
+				a.href   = url;
+				a.rel    = 'noopener';
+				a.target = '_blank';
+				a.appendChild( document.createTextNode( match[ 1 ] ) );
+				parent.appendChild( a );
+			} else {
+				parent.appendChild( document.createTextNode( match[ 0 ] ) );
+			}
 			lastIdx = match.index + match[ 0 ].length;
 		}
 		if ( lastIdx < text.length ) {
