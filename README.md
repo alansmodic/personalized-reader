@@ -128,6 +128,8 @@ personalized-reader/
     ├── frontend/
     │   ├── class-block.php           # register_block_type
     │   └── class-widget.php          # enqueue + shortcode + shared render_markup()
+    ├── integrations/
+    │   └── class-wpvdb-backend.php   # Auto-detects WPVDB, routes search to its vector index
     ├── rest/class-chat-controller.php  # REST routes (session, transcript, clear, send)
     ├── settings/class-settings.php   # Single option, sanitize, get()/all()
     ├── tools/class-tool-executor.php  # WP_Agent_Tool_Executor adapter → wp_get_ability()->execute()
@@ -218,6 +220,38 @@ add_filter( 'personalized_reader_system_prompt', function ( $prompt, $publicatio
 // Force-enqueue the widget on every page (e.g. when rendering via a template tag).
 add_filter( 'personalized_reader_enqueue_assets', '__return_true' );
 ```
+
+### Semantic search via WPVDB (optional, recommended)
+
+The default `personalized_reader_search_archive` backend is a `WP_Query`
+keyword search (`s=`) — fine for a demo, blunt for production. Install
+[Automattic/wpvdb](https://github.com/Automattic/wpvdb) and the plugin
+will detect it and route both `search-archive` and `recommend` through
+WPVDB's `vdb_vector_query` automatically.
+
+```bash
+wp plugin install --activate https://github.com/Automattic/wpvdb/archive/refs/heads/main.zip
+# Configure your embedding API key in WPVDB settings → embed your archive
+```
+
+When WPVDB is active and **Use WPVDB when available** is checked under
+Settings → Personalized Reader → Search backend, the agent retrieves
+articles by semantic similarity instead of literal keyword matches. The
+adapter lives at `includes/integrations/class-wpvdb-backend.php` — it's
+a thin wrapper around:
+
+```php
+$q = new WP_Query( array(
+    'post_type'        => 'post',
+    'post_status'      => 'publish',
+    'posts_per_page'   => $args['limit'] ?? 10,
+    'vdb_vector_query' => $args['query'],
+) );
+```
+
+If you don't want the built-in adapter, uncheck the setting and
+register your own filter handler — `personalized_reader_search_archive`
+still wins.
 
 **Precedence:** Filter > Stored option > Built-in default. So you can pin
 `personalized_reader_system_prompt` via code on a multisite/VIP install and the
@@ -316,10 +350,14 @@ studio wp personalized-reader chat "What have you written about housing?"
 - **No live token streaming.** The current WP AI client surface doesn't expose
   per-token callbacks. Each tool round emits one full `assistant_chunk` event.
   SSE plumbing is in place for when it lands.
-- **WP_Query is a stub backend.** The default search uses `s=` keyword matching,
-  which is fine for a demo but misses semantic intent. Wire a real vector
-  backend (Enterprise Search, pgvector, Pinecone, etc.) via the
-  `personalized_reader_search_archive` and `…_recommendations` filters.
+- **WP_Query is the stub backend.** The default search uses `s=` keyword
+  matching, which is fine for a demo but misses semantic intent. Install
+  [Automattic/wpvdb](https://github.com/Automattic/wpvdb) — the plugin
+  detects it automatically and routes search/recommendations through
+  WPVDB's vector index. See the "Semantic search via WPVDB" section above.
+  Other backends (Enterprise Search, pgvector, Pinecone, …) can be wired
+  via the `personalized_reader_search_archive` and `…_recommendations`
+  filters.
 - **Anonymous sessions only.** Transcripts are session-token keyed in transients
   with a 24-hour TTL. Logged-in subscribers don't get longer-lived history yet.
 - **Markdown subset.** The widget's renderer covers paragraphs, links, bold,

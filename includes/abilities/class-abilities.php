@@ -269,7 +269,7 @@ final class Abilities {
 			'url'       => (string) get_permalink( $post ),
 			'author'    => (string) get_the_author_meta( 'display_name', (int) $post->post_author ),
 			'published' => (string) get_post_time( 'c', true, $post ),
-			'authority' => $this->classify_authority( $post ),
+			'authority' => self::classify_authority( $post ),
 		);
 	}
 
@@ -352,7 +352,7 @@ final class Abilities {
 		$posts   = get_posts( $wp_args );
 		$results = array();
 		foreach ( $posts as $post ) {
-			$authority = $this->classify_authority( $post );
+			$authority = self::classify_authority( $post );
 			if ( ! empty( $args['authority'] ) && 'any' !== $args['authority'] && $authority !== $args['authority'] ) {
 				continue;
 			}
@@ -371,9 +371,16 @@ final class Abilities {
 		return $results;
 	}
 
-	private function classify_authority( \WP_Post $post ): string {
-		$opinion_cat  = (string) Settings::get( 'authority_opinion_cat' );
-		$wire_tags    = array_filter( array_map( 'trim', explode( ',', (string) Settings::get( 'authority_wire_tags' ) ) ) );
+	/**
+	 * Classify a post into an authority tier ('opinion', 'wire',
+	 * 'original-reporting'). Mappings are settings-driven.
+	 *
+	 * Public + static so integrations (e.g. the WPVDB backend adapter)
+	 * can reuse the same logic without going through a filter chain.
+	 */
+	public static function classify_authority( \WP_Post $post ): string {
+		$opinion_cat = (string) Settings::get( 'authority_opinion_cat' );
+		$wire_tags   = array_filter( array_map( 'trim', explode( ',', (string) Settings::get( 'authority_wire_tags' ) ) ) );
 
 		$category_slugs = wp_get_post_categories( $post->ID, array( 'fields' => 'slugs' ) );
 		if ( '' !== $opinion_cat && in_array( $opinion_cat, (array) $category_slugs, true ) ) {

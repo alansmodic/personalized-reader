@@ -39,6 +39,7 @@ final class Settings {
 		'rate_limit_per_minute' => 10,
 		'authority_opinion_cat' => 'opinion',   // category slug → opinion tier
 		'authority_wire_tags'   => 'wire,ap',   // comma-separated tag slugs → wire tier
+		'wpvdb_integration'     => true,        // auto-route search through WPVDB when present
 	);
 
 	public static function register(): void {
@@ -125,6 +126,14 @@ final class Settings {
 		if ( array_key_exists( 'authority_wire_tags', $input ) ) {
 			$tags = array_map( 'sanitize_title', array_filter( array_map( 'trim', explode( ',', (string) $input['authority_wire_tags'] ) ) ) );
 			$out['authority_wire_tags'] = implode( ',', $tags );
+		}
+
+		if ( array_key_exists( 'wpvdb_integration', $input ) ) {
+			$out['wpvdb_integration'] = (bool) $input['wpvdb_integration'];
+		} else {
+			// Unchecked checkboxes don't submit a key — explicit false when
+			// the form was submitted but the toggle is off.
+			$out['wpvdb_integration'] = false;
 		}
 
 		return $out;

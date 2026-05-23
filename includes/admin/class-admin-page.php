@@ -21,6 +21,7 @@ namespace PersonalizedReader\Admin;
 use PersonalizedReader\Abilities\Abilities;
 use PersonalizedReader\Compat\Dependencies;
 use PersonalizedReader\Conversation\Usage_Tracker;
+use PersonalizedReader\Integrations\WPVDB_Backend;
 use PersonalizedReader\Rest\Chat_Controller;
 use PersonalizedReader\Settings\Settings;
 
@@ -175,6 +176,29 @@ final class Admin_Page {
 			array( $this, 'field_text' ),
 			__( 'Comma-separated tag slugs. Posts carrying any of these are treated as wire content.', 'personalized-reader' )
 		);
+
+		add_settings_section(
+			'pr_section_backends',
+			__( 'Search backend', 'personalized-reader' ),
+			static function (): void {
+				$installed = WPVDB_Backend::is_available();
+				printf(
+					'<p>%s</p>',
+					$installed
+						? esc_html__( 'WPVDB is installed and active. When enabled below, semantic vector search replaces the default WP_Query keyword search.', 'personalized-reader' )
+						: esc_html__( 'WPVDB is not installed. Without it the agent falls back to keyword-only WP_Query search. Install Automattic/wpvdb to get semantic similarity ranking.', 'personalized-reader' )
+				);
+			},
+			self::MENU_SLUG
+		);
+
+		$this->add_field(
+			'wpvdb_integration',
+			__( 'Use WPVDB when available', 'personalized-reader' ),
+			'pr_section_backends',
+			array( $this, 'field_checkbox' ),
+			__( 'When WPVDB is active, route search and recommendation queries through its vector index. Has no effect when WPVDB is not installed.', 'personalized-reader' )
+		);
 	}
 
 	private function add_field( string $key, string $label, string $section, callable $render, string $help = '' ): void {
@@ -221,6 +245,17 @@ final class Admin_Page {
 			esc_attr( Settings::OPTION_NAME ),
 			esc_attr( $key ),
 			$value
+		);
+	}
+
+	public function field_checkbox( string $key ): void {
+		$value = (bool) Settings::get( $key );
+		printf(
+			'<label><input type="checkbox" name="%s[%s]" value="1"%s /> %s</label>',
+			esc_attr( Settings::OPTION_NAME ),
+			esc_attr( $key ),
+			checked( true, $value, false ),
+			esc_html__( 'Enabled', 'personalized-reader' )
 		);
 	}
 
@@ -459,6 +494,19 @@ final class Admin_Page {
 				'detail' => $agent_ok
 					? esc_html__( 'personalized-reader agent is registered.', 'personalized-reader' )
 					: esc_html__( 'Agent not registered (Agents API likely unavailable).', 'personalized-reader' ),
+			),
+			array(
+				// Informational only — the agent works fine without WPVDB.
+				// Mark as "ok" when present, "ok" (with a different detail
+				// string) when absent, so this never lights up red.
+				'ok'    => true,
+				'label' => __( 'WPVDB (semantic search)', 'personalized-reader' ),
+				'detail' => WPVDB_Backend::is_available()
+					? ( (bool) Settings::get( 'wpvdb_integration' )
+						? esc_html__( 'Detected and routed: search runs through the vector index.', 'personalized-reader' )
+						: esc_html__( 'Detected but disabled in settings. Search falls back to keyword WP_Query.', 'personalized-reader' )
+					)
+					: esc_html__( 'Not installed. Search uses keyword WP_Query. Install Automattic/wpvdb for semantic ranking.', 'personalized-reader' ),
 			),
 		);
 	}

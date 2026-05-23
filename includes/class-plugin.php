@@ -15,6 +15,7 @@ use PersonalizedReader\Agent\Reader_Agent;
 use PersonalizedReader\CLI\CLI_Command;
 use PersonalizedReader\Frontend\Block;
 use PersonalizedReader\Frontend\Widget;
+use PersonalizedReader\Integrations\WPVDB_Backend;
 use PersonalizedReader\Rest\Chat_Controller;
 use PersonalizedReader\Settings\Settings;
 use PersonalizedReader\Streaming\Chat_Stream_Endpoint;
@@ -37,6 +38,7 @@ final class Plugin {
 		Chat_Stream_Endpoint::register();
 		( new Widget() )->register();
 		( new Block() )->register();
+		( new WPVDB_Backend() )->register();
 		if ( is_admin() ) {
 			( new Admin_Page() )->register();
 		}
