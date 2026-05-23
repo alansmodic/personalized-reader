@@ -253,6 +253,26 @@ If you don't want the built-in adapter, uncheck the setting and
 register your own filter handler — `personalized_reader_search_archive`
 still wins.
 
+#### Proven contrast (live test)
+
+Same agent, same archive of 4 published posts (city housing plan,
+tenant union eviction suit, climate emissions miss, opinion piece on
+zoning), same question:
+
+> *"What do you cover on urban inequality and displacement?"*
+
+None of the words `urban`, `inequality`, `displacement`,
+`gentrification`, `housing`, or `cities` literally appear in any post
+body. The agent's behavior diverged sharply between backends:
+
+| Backend | Result |
+|---|---|
+| **WPVDB on (semantic)** | Found three relevant posts on the first search. Grouped them by authority tier — reporting vs. opinion — and offered adjacent topics as a follow-up. |
+| **WPVDB off (keyword)** | Empty results across four query variations (the model expanded `urban inequality` → `gentrification` → `affordable housing evictions` → `poverty inequality`). The agent honestly concluded: *"I'm not finding anything in our archive on urban inequality, displacement, gentrification, housing, or related angles."* |
+
+The no-fabrication guardrail held in both runs — the difference is
+purely in what the retrieval layer can surface.
+
 **Precedence:** Filter > Stored option > Built-in default. So you can pin
 `personalized_reader_system_prompt` via code on a multisite/VIP install and the
 admin field becomes a no-op for that site.
@@ -327,13 +347,17 @@ php -r 'json_decode(file_get_contents("blocks/reader-chat/block.json"), true, 51
 
 ### Testing against a real WordPress site
 
-The fastest path is a [Studio](https://developer.wordpress.com/studio/) site
-with the dependency stack installed:
+Two options depending on what you want to exercise.
+
+**Studio (fastest, agent only).** Studio is SQLite-only, which means
+the agent layer works fine but the WPVDB integration cannot be tested
+(WPVDB needs MySQL/MariaDB). Use Studio when iterating on prompts,
+abilities, or the conversation runner:
 
 ```bash
 studio site create --name="personalized-reader-test"
 
-cp -R /path/to/agents-api               ~/Studio/personalized-reader-test/wp-content/plugins/
+cp -R /path/to/agents-api                ~/Studio/personalized-reader-test/wp-content/plugins/
 cp -R /path/to/ai-provider-for-anthropic ~/Studio/personalized-reader-test/wp-content/plugins/
 ln -sfn $PWD ~/Studio/personalized-reader-test/wp-content/plugins/personalized-reader
 
@@ -342,6 +366,106 @@ studio wp plugin activate agents-api ai-provider-for-anthropic personalized-read
 studio wp option update connectors_ai_anthropic_api_key '<your-key>'
 studio wp personalized-reader chat "What have you written about housing?"
 ```
+
+**LocalWP (MySQL — needed for WPVDB).** When testing the semantic
+search path, use LocalWP. Create a site with MySQL 8.x, then:
+
+```bash
+brew install --cask local       # if you don't have LocalWP yet
+# Create the site in the Local GUI: PHP 8.1+, MySQL 8.0+, name it whatever.
+
+SITE=~/Local\ Sites/personalized-reader/app/public
+
+# Symlink this plugin, copy the deps
+ln -sfn /path/to/personalized-reader "$SITE/wp-content/plugins/personalized-reader"
+cp -R /path/to/agents-api                "$SITE/wp-content/plugins/"
+cp -R /path/to/ai-provider-for-anthropic "$SITE/wp-content/plugins/"
+cp -R /path/to/action-scheduler          "$SITE/wp-content/plugins/"
+
+# Fetch WPVDB
+cd "$SITE/wp-content/plugins"
+curl -sL https://github.com/Automattic/wpvdb/archive/refs/heads/main.zip -o wpvdb.zip \
+  && unzip -q wpvdb.zip && mv wpvdb-main wpvdb && rm wpvdb.zip
+
+# Local's MySQL is socket-only. Point wp-config at it (one-time):
+SITE_ID=$(ls ~/Library/Application\ Support/Local/run/ | head -1)
+SOCK="$HOME/Library/Application Support/Local/run/$SITE_ID/mysql/mysqld.sock"
+sed -i.bak "s|define( 'DB_HOST', 'localhost' );|define( 'DB_HOST', 'localhost:$SOCK' );|" "$SITE/wp-config.php"
+
+cd "$SITE"
+wp plugin activate agents-api action-scheduler ai-provider-for-anthropic wpvdb personalized-reader
+wp option update connectors_ai_anthropic_api_key '<your-anthropic-key>'
+```
+
+#### WPVDB on MySQL 8.x — two workarounds you'll need
+
+WPVDB targets MySQL 8.0.32+ (with native `VECTOR`) or MariaDB 11.7+.
+Oracle MySQL didn't actually ship the `VECTOR` type until 9.0, but
+WPVDB's version check accepts any 8.0.32+ as compatible. On MySQL 8.x
+the embeddings table fails to create. Two pieces unblock this:
+
+1. **Opt into JSON-fallback storage** via a mu-plugin:
+
+   ```php
+   // wp-content/mu-plugins/00-wpvdb-fallbacks.php
+   <?php
+   /**
+    * Plugin Name: WPVDB Fallback Storage
+    */
+   add_filter( 'wpvdb_enable_fallbacks', '__return_true' );
+   ```
+
+2. **Patch WPVDB to honor that filter when picking the column type.**
+   `Database::has_native_vector_support()` doesn't currently consult
+   `are_fallbacks_enabled()`, so even with the filter set the schema
+   still tries to use `VECTOR(...)`. Add a one-line short-circuit at
+   the top of the method in
+   `wp-content/plugins/wpvdb/includes/class-wpvdb-database.php`:
+
+   ```php
+   public function has_native_vector_support() {
+       if ( $this->are_fallbacks_enabled() ) {
+           return false;
+       }
+       // … existing body unchanged
+   }
+   ```
+
+   This is a local-only edit (it's in WPVDB's source, not in this
+   plugin). On a host with real native `VECTOR` (MySQL 9.0+, MariaDB
+   11.7+, MySQL HeatWave) neither workaround is needed.
+
+#### Configure WPVDB and embed the archive
+
+```bash
+cd ~/Local\ Sites/personalized-reader/app/public
+
+# OpenAI key (cheapest path; ~$0.001 per short post)
+echo "define( 'WPVDB_OPENAI_API_KEY', 'sk-...' );" >> wp-config.php
+
+# Point WPVDB at OpenAI's text-embedding-3-small
+wp option update wpvdb_settings --format=json \
+  '{"active_provider":"openai","provider":"openai","default_model":"text-embedding-3-small"}'
+
+# Embed everything
+wp eval '
+$posts = get_posts( array( "post_type" => "post", "posts_per_page" => -1 ) );
+foreach ( $posts as $p ) {
+    \WPVDB\WPVDB_Queue::process_item( array(
+        "post_id" => $p->ID,
+        "model"   => "text-embedding-3-small",
+        "provider" => "openai",
+    ) );
+}
+echo $GLOBALS["wpdb"]->get_var("SELECT COUNT(*) FROM wp_wpvdb_embeddings") . " embeddings\n";
+'
+
+# Run a semantic query
+wp personalized-reader chat "What do you cover on urban inequality?"
+```
+
+If you see results despite the query terms not appearing in any post,
+the vector path is working.
 
 ---
 
@@ -358,6 +482,12 @@ studio wp personalized-reader chat "What have you written about housing?"
   Other backends (Enterprise Search, pgvector, Pinecone, …) can be wired
   via the `personalized_reader_search_archive` and `…_recommendations`
   filters.
+- **WPVDB on MySQL 8.x needs two workarounds.** WPVDB's native-vector
+  detection accepts any MySQL 8.0.32+ as compatible, but Oracle MySQL
+  didn't ship `VECTOR` until 9.0. On 8.x the schema creation silently
+  fails. See the "Testing against a real WordPress site" section for
+  the mu-plugin + one-line source patch that fixes it. Production
+  hosts running MySQL 9.0+ or MariaDB 11.7+ don't need either.
 - **Anonymous sessions only.** Transcripts are session-token keyed in transients
   with a 24-hour TTL. Logged-in subscribers don't get longer-lived history yet.
 - **Markdown subset.** The widget's renderer covers paragraphs, links, bold,
