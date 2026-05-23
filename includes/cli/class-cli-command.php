@@ -21,7 +21,7 @@ namespace PersonalizedReader\CLI;
 
 use PersonalizedReader\Chat\Transcript_Store;
 use PersonalizedReader\Conversation\Context_Composer;
-use PersonalizedReader\Conversation\Streaming_Runner;
+use PersonalizedReader\Conversation\Conversation_Runner;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -77,7 +77,7 @@ final class CLI_Command {
 		$quiet = ! empty( $assoc['quiet'] );
 		$sink  = new CLI_Event_Sink( $quiet );
 
-		$runner = new Streaming_Runner(
+		$runner = new Conversation_Runner(
 			new Context_Composer(),
 			new Transcript_Store(),
 			$sink,

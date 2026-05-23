@@ -24,7 +24,7 @@ namespace PersonalizedReader\Rest;
 
 use PersonalizedReader\Chat\Transcript_Store;
 use PersonalizedReader\Conversation\Context_Composer;
-use PersonalizedReader\Conversation\Streaming_Runner;
+use PersonalizedReader\Conversation\Conversation_Runner;
 use PersonalizedReader\Settings\Settings;
 use PersonalizedReader\Streaming\Buffering_Event_Sink;
 use PersonalizedReader\Streaming\Chat_Stream_Endpoint;
@@ -159,7 +159,7 @@ final class Chat_Controller {
 		}
 
 		$sink   = new Buffering_Event_Sink();
-		$runner = new Streaming_Runner(
+		$runner = new Conversation_Runner(
 			new Context_Composer(),
 			new Transcript_Store(),
 			$sink,

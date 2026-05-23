@@ -20,9 +20,12 @@ declare( strict_types=1 );
 
 namespace PersonalizedReader\Chat;
 
+use AgentsAPI\AI\WP_Agent_Conversation_Request;
+use AgentsAPI\AI\WP_Agent_Transcript_Persister;
+
 defined( 'ABSPATH' ) || exit;
 
-final class Transcript_Store {
+final class Transcript_Store implements WP_Agent_Transcript_Persister {
 
 	private const TTL_SECONDS = DAY_IN_SECONDS;
 
@@ -80,6 +83,53 @@ final class Transcript_Store {
 			$messages[] = $entry;
 		}
 		set_transient( $key, $messages, self::TTL_SECONDS );
+	}
+
+	/**
+	 * WP_Agent_Transcript_Persister implementation.
+	 *
+	 * Called by WP_Agent_Conversation_Loop at the end of a run to flush the
+	 * final transcript. We replace whatever was stored for the session with
+	 * the substrate's normalized envelope list and return the session id as
+	 * the transcript id.
+	 *
+	 * The substrate passes session id via context; we look it up in the
+	 * request's `context` field, falling back to a metadata key.
+	 *
+	 * @param array<int, array<string, mixed>> $messages
+	 * @param WP_Agent_Conversation_Request    $request
+	 * @param array<string, mixed>             $result
+	 */
+	public function persist( array $messages, WP_Agent_Conversation_Request $request, array $result ): string {
+		$session_token = '';
+		if ( method_exists( $request, 'runtimeContext' ) ) {
+			$ctx           = $request->runtimeContext();
+			$session_token = (string) ( $ctx['session_token'] ?? '' );
+		}
+		if ( '' === $session_token ) {
+			return '';
+		}
+
+		$key = $this->key( $session_token );
+		if ( '' === $key ) {
+			return '';
+		}
+
+		// Tag each entry with a timestamp so transcript dumps still sort
+		// chronologically. Envelope arrays already carry role/content, which
+		// is all our load() consumers need.
+		$tagged = array();
+		$now    = time();
+		foreach ( $messages as $envelope ) {
+			$entry = is_array( $envelope ) ? $envelope : array();
+			if ( ! isset( $entry['ts'] ) ) {
+				$entry['ts'] = $now;
+			}
+			$tagged[] = $entry;
+		}
+
+		set_transient( $key, $tagged, self::TTL_SECONDS );
+		return $session_token;
 	}
 
 	public function clear( string $session_token ): void {

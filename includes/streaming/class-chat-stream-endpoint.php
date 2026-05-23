@@ -23,7 +23,7 @@ namespace PersonalizedReader\Streaming;
 
 use PersonalizedReader\Chat\Transcript_Store;
 use PersonalizedReader\Conversation\Context_Composer;
-use PersonalizedReader\Conversation\Streaming_Runner;
+use PersonalizedReader\Conversation\Conversation_Runner;
 use PersonalizedReader\Settings\Settings;
 use PersonalizedReader\Utils\Rate_Limiter;
 
@@ -107,7 +107,7 @@ final class Chat_Stream_Endpoint {
 		@set_time_limit( 120 );
 		ignore_user_abort( false );
 
-		$runner = new Streaming_Runner(
+		$runner = new Conversation_Runner(
 			new Context_Composer(),
 			new Transcript_Store(),
 			new Event_Emitter(),

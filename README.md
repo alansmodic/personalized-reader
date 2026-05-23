@@ -66,15 +66,22 @@ echo do_shortcode( '[personalized_reader]' );
 ┌─────────────────────────────────────────────────────────────────────┐
 │  WordPress                                                          │
 │                                                                     │
-│  Streaming_Runner ─────► wp_ai_client_prompt()                      │
-│       │                       ├─ ->using_system_instruction()       │
-│       │                       ├─ ->using_abilities( ...slugs )      │
-│       │                       ├─ ->with_history( Message… )         │
-│       │                       └─ ->generate_text_result()           │
+│  Conversation_Runner ──► WP_Agent_Conversation_Loop::run()          │
+│       │                       │  (agents-api substrate)             │
+│       │                       │                                     │
+│       │                       │  • Multi-turn sequencing            │
+│       │                       │  • Tool-call mediation              │
+│       │                       │  • Transcript persistence           │
+│       │                       │  • Lifecycle events                 │
+│       │                       │                                     │
+│       │                       ├─► turn_runner (our closure)         │
+│       │                       │     wp_ai_client_prompt()           │
+│       │                       │        ->using_abilities(...)       │
+│       │                       │        ->generate_text_result()     │
+│       │                       │                                     │
+│       │                       └─► Tool_Executor (our adapter)       │
+│       │                              wp_get_ability()->execute()    │
 │       │                                                             │
-│       ◄─── WP_AI_Client_Ability_Function_Resolver ─── executes      │
-│            (loops up to N rounds)                                    │
-│                                                                     │
 │  Abilities API ◄─── 4 read-only abilities (search/get/sub/recommend)│
 │       │                                                             │
 │       ▼                                                             │
@@ -84,7 +91,8 @@ echo do_shortcode( '[personalized_reader]' );
 │   - personalized_reader_subscription_status                         │
 │   - personalized_reader_system_prompt                               │
 │                                                                     │
-│  Transcript_Store (transients, session-token keyed, 24h TTL)         │
+│  Transcript_Store ─► implements WP_Agent_Transcript_Persister       │
+│    (transients, session-token keyed, 24h TTL)                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -112,13 +120,14 @@ personalized-reader/
     ├── cli/class-cli-event-sink.php  # Event_Sink that prints to stdout
     ├── compat/class-dependencies.php # Runtime dep checks
     ├── conversation/
-    │   ├── class-context-composer.php  # System prompt (override → filter → default)
-    │   └── class-streaming-runner.php  # Multi-round runner over the AI client
+    │   ├── class-context-composer.php     # System prompt (override → filter → default)
+    │   └── class-conversation-runner.php  # Thin orchestration over WP_Agent_Conversation_Loop
     ├── frontend/
     │   ├── class-block.php           # register_block_type
     │   └── class-widget.php          # enqueue + shortcode + shared render_markup()
     ├── rest/class-chat-controller.php  # REST routes (session, transcript, clear, send)
     ├── settings/class-settings.php   # Single option, sanitize, get()/all()
+    ├── tools/class-tool-executor.php  # WP_Agent_Tool_Executor adapter → wp_get_ability()->execute()
     ├── streaming/
     │   ├── class-buffering-event-sink.php  # in-memory (REST fallback)
     │   ├── class-chat-stream-endpoint.php  # SSE via parse_request rewrite
