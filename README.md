@@ -115,13 +115,16 @@ personalized-reader/
     ├── abilities/class-abilities.php # Category + four abilities + classify_authority()
     ├── admin/class-admin-page.php    # Settings → Personalized Reader
     ├── agent/class-reader-agent.php  # wp_register_agent
-    ├── chat/class-transcript-store.php  # session-token keyed transient storage
+    ├── chat/
+    │   ├── class-conversation-lock.php   # WP_Agent_Conversation_Lock impl (options-table)
+    │   └── class-transcript-store.php    # WP_Agent_Transcript_Persister + session-keyed loader
     ├── cli/class-cli-command.php     # wp personalized-reader chat | transcript | clear
     ├── cli/class-cli-event-sink.php  # Event_Sink that prints to stdout
     ├── compat/class-dependencies.php # Runtime dep checks
     ├── conversation/
     │   ├── class-context-composer.php     # System prompt (override → filter → default)
-    │   └── class-conversation-runner.php  # Thin orchestration over WP_Agent_Conversation_Loop
+    │   ├── class-conversation-runner.php  # Thin orchestration over WP_Agent_Conversation_Loop
+    │   └── class-usage-tracker.php        # Cumulative token-usage option storage
     ├── frontend/
     │   ├── class-block.php           # register_block_type
     │   └── class-widget.php          # enqueue + shortcode + shared render_markup()

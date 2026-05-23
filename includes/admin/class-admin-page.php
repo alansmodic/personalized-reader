@@ -20,6 +20,7 @@ namespace PersonalizedReader\Admin;
 
 use PersonalizedReader\Abilities\Abilities;
 use PersonalizedReader\Compat\Dependencies;
+use PersonalizedReader\Conversation\Usage_Tracker;
 use PersonalizedReader\Rest\Chat_Controller;
 use PersonalizedReader\Settings\Settings;
 
@@ -270,6 +271,9 @@ final class Admin_Page {
 				</tbody>
 			</table>
 
+			<h2><?php esc_html_e( 'Usage', 'personalized-reader' ); ?></h2>
+			<?php $this->render_usage(); ?>
+
 			<h2><?php esc_html_e( 'Settings', 'personalized-reader' ); ?></h2>
 			<form method="post" action="options.php">
 				<?php
@@ -363,6 +367,43 @@ final class Admin_Page {
 			} )();
 			</script>
 		</div>
+		<?php
+	}
+
+	private function render_usage(): void {
+		$totals     = Usage_Tracker::totals();
+		$this_month = Usage_Tracker::this_month();
+		?>
+		<table class="widefat striped" style="max-width: 720px;">
+			<thead>
+				<tr>
+					<th></th>
+					<th><?php esc_html_e( 'Sessions', 'personalized-reader' ); ?></th>
+					<th><?php esc_html_e( 'Prompt tokens', 'personalized-reader' ); ?></th>
+					<th><?php esc_html_e( 'Completion tokens', 'personalized-reader' ); ?></th>
+					<th><?php esc_html_e( 'Total tokens', 'personalized-reader' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td><strong><?php esc_html_e( 'This month', 'personalized-reader' ); ?></strong></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $this_month['sessions'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $this_month['prompt_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $this_month['completion_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $this_month['total_tokens'] ) ); ?></td>
+				</tr>
+				<tr>
+					<td><strong><?php esc_html_e( 'All time', 'personalized-reader' ); ?></strong></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $totals['sessions'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $totals['prompt_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $totals['completion_tokens'] ) ); ?></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $totals['total_tokens'] ) ); ?></td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="description">
+			<?php esc_html_e( 'Token counts are summed across every conversation turn the agent runs. "Sessions" counts each completed Loop::run call, not unique visitors.', 'personalized-reader' ); ?>
+		</p>
 		<?php
 	}
 
