@@ -24,6 +24,7 @@ use PersonalizedReader\Conversation\Usage_Tracker;
 use PersonalizedReader\Integrations\WPVDB_Backend;
 use PersonalizedReader\Rest\Chat_Controller;
 use PersonalizedReader\Settings\Settings;
+use PersonalizedReader\Streaming\Chat_Stream_Endpoint;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -31,10 +32,48 @@ final class Admin_Page {
 
 	private const MENU_SLUG = 'personalized-reader';
 
+	/**
+	 * Cache key for the SSE-reachable probe. Cached briefly even on
+	 * failure so repeated admin page loads don't hammer the loopback.
+	 */
+	private const SSE_HEALTH_TRANSIENT = 'pr_sse_health';
+
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_fields' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'maybe_enqueue' ) );
+		add_action( 'admin_post_personalized_reader_flush_rewrites', array( $this, 'handle_flush_rewrites' ) );
+	}
+
+	/**
+	 * Admin-post target for the "Flush rewrites" button on the status panel.
+	 * Verifies the nonce + capability, re-registers our rewrite rule, then
+	 * calls flush_rewrite_rules() and redirects back with a success notice.
+	 *
+	 * Flushing rewrites is one of the few things WP recommends doing rarely
+	 * (it rewrites .htaccess on apache and rebuilds rules from scratch),
+	 * so the button is the only path — there's no automatic retry.
+	 */
+	public function handle_flush_rewrites(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to flush rewrites.', 'personalized-reader' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'personalized_reader_flush_rewrites' );
+
+		Chat_Stream_Endpoint::add_rewrite();
+		flush_rewrite_rules();
+		delete_transient( self::SSE_HEALTH_TRANSIENT );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'      => self::MENU_SLUG,
+					'pr_notice' => 'rewrites_flushed',
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
 	}
 
 	public function add_menu(): void {
@@ -319,6 +358,7 @@ final class Admin_Page {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		$this->maybe_render_notice();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Personalized Reader', 'personalized-reader' ); ?></h1>
@@ -498,6 +538,22 @@ final class Admin_Page {
 		<?php
 	}
 
+	private function maybe_render_notice(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only display flag set by our own admin-post redirect.
+		if ( ! isset( $_GET['pr_notice'] ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- ditto.
+		$notice = sanitize_key( wp_unslash( $_GET['pr_notice'] ) );
+		if ( 'rewrites_flushed' !== $notice ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+			esc_html__( 'Rewrite rules flushed. The SSE chat endpoint should now resolve.', 'personalized-reader' )
+		);
+	}
+
 	/**
 	 * @return array<int, array{ok:bool, label:string, detail:string}>
 	 */
@@ -514,6 +570,7 @@ final class Admin_Page {
 		$agent_ok    = function_exists( 'wp_get_agent' ) && wp_get_agent( 'personalized-reader' );
 		$provider_ok = $this->is_ai_provider_ready();
 		$wpvdb_state = $this->wpvdb_state();
+		$sse_state   = $this->sse_health();
 
 		return array(
 			array(
@@ -554,6 +611,11 @@ final class Admin_Page {
 					: esc_html__( 'Agent not registered (Agents API likely unavailable).', 'personalized-reader' ),
 			),
 			array(
+				'ok'     => $sse_state['ok'],
+				'label'  => __( 'SSE endpoint reachable', 'personalized-reader' ),
+				'detail' => $sse_state['detail'],
+			),
+			array(
 				'ok'     => $provider_ok,
 				'label'  => __( 'AI provider configured', 'personalized-reader' ),
 				'detail' => $provider_ok
@@ -590,6 +652,95 @@ final class Admin_Page {
 				'detail' => $wpvdb_state['embedded_detail'],
 			),
 		);
+	}
+
+	/**
+	 * Probe the SSE chat-stream endpoint via a HEAD request.
+	 *
+	 * Decision matrix:
+	 *
+	 *   - 405 Method Not Allowed → rewrite resolves, endpoint rejects HEAD
+	 *     (which is what its handler does for anything but POST). Healthy.
+	 *   - 404 Not Found          → rewrite rule isn't registered. The
+	 *     plugin's activation hook runs flush_rewrite_rules() but it can
+	 *     get out of sync after a wp-cli copy, a multisite move, or a
+	 *     permalink-structure change. Surface a button.
+	 *   - anything else / network error → ambiguous (loopback disabled,
+	 *     reverse proxy intercept, etc.) — report as unknown rather than
+	 *     unhealthy so we don't false-positive.
+	 *
+	 * Result cached briefly in a transient — even on failure, since a
+	 * settings page reload shouldn't issue a fresh loopback every time.
+	 *
+	 * @return array{ok:bool, detail:string}
+	 */
+	private function sse_health(): array {
+		$flush_url = wp_nonce_url(
+			admin_url( 'admin-post.php?action=personalized_reader_flush_rewrites' ),
+			'personalized_reader_flush_rewrites'
+		);
+
+		$cached = get_transient( self::SSE_HEALTH_TRANSIENT );
+		if ( is_array( $cached ) && isset( $cached['ok'], $cached['detail'] ) ) {
+			return array(
+				'ok'     => (bool) $cached['ok'],
+				'detail' => (string) $cached['detail'],
+			);
+		}
+
+		$url      = home_url( '/personalized-reader/chat-stream' );
+		$response = wp_remote_request(
+			$url,
+			array(
+				'method'      => 'HEAD',
+				'timeout'     => 4,
+				'redirection' => 0,
+				'sslverify'   => false,
+			)
+		);
+
+		$ok          = false;
+		$status_code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		$cache_ttl   = 5 * MINUTE_IN_SECONDS;
+
+		if ( 405 === $status_code ) {
+			$ok        = true;
+			$detail    = esc_html__( 'HEAD probe returned 405 (Method Not Allowed). Rewrite is registered and the endpoint is rejecting HEAD as designed.', 'personalized-reader' );
+			$cache_ttl = HOUR_IN_SECONDS;
+		} elseif ( 404 === $status_code ) {
+			$detail = wp_kses_post(
+				sprintf(
+				/* translators: %s: flush-rewrites action URL */
+					__( 'HEAD probe returned 404. The rewrite rule for <code>/personalized-reader/chat-stream</code> is not active — readers will fall back to the buffered REST endpoint, losing live streaming. <a href="%s">Flush rewrites</a> to fix.', 'personalized-reader' ),
+					esc_url( $flush_url )
+				)
+			);
+		} elseif ( is_wp_error( $response ) ) {
+			$detail = wp_kses_post(
+				sprintf(
+				/* translators: 1: wp_error message, 2: flush-rewrites action URL */
+					__( 'Loopback probe failed: %1$s. This often means WP cannot reach itself (firewall, reverse-proxy, or HTTPS cert issue) — it does not necessarily mean the endpoint is broken. If readers see stalled chats, <a href="%2$s">flush rewrites</a> and retry.', 'personalized-reader' ),
+					esc_html( $response->get_error_message() ),
+					esc_url( $flush_url )
+				)
+			);
+		} else {
+			$detail = wp_kses_post(
+				sprintf(
+				/* translators: 1: HTTP status code, 2: flush-rewrites action URL */
+					__( 'Unexpected HEAD response: %1$d. Expected 405 from the SSE handler. If chats are stalling, <a href="%2$s">flush rewrites</a>.', 'personalized-reader' ),
+					$status_code,
+					esc_url( $flush_url )
+				)
+			);
+		}
+
+		$result = array(
+			'ok'     => $ok,
+			'detail' => $detail,
+		);
+		set_transient( self::SSE_HEALTH_TRANSIENT, $result, $cache_ttl );
+		return $result;
 	}
 
 	/**
