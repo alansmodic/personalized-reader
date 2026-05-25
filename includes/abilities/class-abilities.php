@@ -66,26 +66,42 @@ final class Abilities {
 		wp_register_ability(
 			'personalized-reader/search-archive',
 			array(
-				'label'       => __( 'Search the publication archive', 'personalized-reader' ),
-				'description' => __( 'Search published articles by topic, keyword, date range, author, or authority tier (original reporting, wire, opinion).', 'personalized-reader' ),
-				'category'    => self::CATEGORY,
-				'input_schema'  => array(
+				'label'               => __( 'Search the publication archive', 'personalized-reader' ),
+				'description'         => __( 'Search published articles by topic, keyword, date range, author, or authority tier (original reporting, wire, opinion).', 'personalized-reader' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
-						'query'     => array( 'type' => 'string', 'description' => 'Natural-language search query.' ),
-						'date_from' => array( 'type' => 'string', 'description' => 'ISO 8601 start date filter.' ),
-						'date_to'   => array( 'type' => 'string', 'description' => 'ISO 8601 end date filter.' ),
-						'author'    => array( 'type' => 'string', 'description' => 'Filter by author display name.' ),
+						'query'     => array(
+							'type'        => 'string',
+							'description' => 'Natural-language search query.',
+						),
+						'date_from' => array(
+							'type'        => 'string',
+							'description' => 'ISO 8601 start date filter.',
+						),
+						'date_to'   => array(
+							'type'        => 'string',
+							'description' => 'ISO 8601 end date filter.',
+						),
+						'author'    => array(
+							'type'        => 'string',
+							'description' => 'Filter by author display name.',
+						),
 						'authority' => array(
 							'type'        => 'string',
 							'enum'        => array( 'original-reporting', 'wire', 'opinion', 'any' ),
 							'description' => 'Filter by authority tier.',
 						),
-						'limit'     => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 20 ),
+						'limit'     => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+							'maximum' => 20,
+						),
 					),
 					'required'   => array( 'query' ),
 				),
-				'output_schema' => array(
+				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'results' => array(
@@ -117,17 +133,17 @@ final class Abilities {
 		wp_register_ability(
 			'personalized-reader/get-article',
 			array(
-				'label'       => __( 'Retrieve a published article', 'personalized-reader' ),
-				'description' => __( 'Return the title, body, author, and authority tier for a published article. Only published posts are returned; drafts and private posts are rejected.', 'personalized-reader' ),
-				'category'    => self::CATEGORY,
-				'input_schema'  => array(
+				'label'               => __( 'Retrieve a published article', 'personalized-reader' ),
+				'description'         => __( 'Return the title, body, author, and authority tier for a published article. Only published posts are returned; drafts and private posts are rejected.', 'personalized-reader' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
 						'post_id' => array( 'type' => 'integer' ),
 						'url'     => array( 'type' => 'string' ),
 					),
 				),
-				'output_schema' => array(
+				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'post_id'   => array( 'type' => 'integer' ),
@@ -150,16 +166,19 @@ final class Abilities {
 		wp_register_ability(
 			'personalized-reader/check-subscription',
 			array(
-				'label'       => __( 'Check reader subscription status', 'personalized-reader' ),
-				'description' => __( 'Return the current visitor\'s subscription status and metered access counters. For anonymous visitors the result is keyed by a session token.', 'personalized-reader' ),
-				'category'    => self::CATEGORY,
-				'input_schema'  => array(
+				'label'               => __( 'Check reader subscription status', 'personalized-reader' ),
+				'description'         => __( 'Return the current visitor\'s subscription status and metered access counters. For anonymous visitors the result is keyed by a session token.', 'personalized-reader' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
-						'session_token' => array( 'type' => 'string', 'description' => 'Opaque session identifier supplied by the chat endpoint.' ),
+						'session_token' => array(
+							'type'        => 'string',
+							'description' => 'Opaque session identifier supplied by the chat endpoint.',
+						),
 					),
 				),
-				'output_schema' => array(
+				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'is_subscriber'  => array( 'type' => 'boolean' ),
@@ -178,10 +197,10 @@ final class Abilities {
 		wp_register_ability(
 			'personalized-reader/recommend',
 			array(
-				'label'       => __( 'Recommend articles', 'personalized-reader' ),
-				'description' => __( 'Recommend articles relevant to a set of topics, excluding any post IDs already shown in the current conversation.', 'personalized-reader' ),
-				'category'    => self::CATEGORY,
-				'input_schema'  => array(
+				'label'               => __( 'Recommend articles', 'personalized-reader' ),
+				'description'         => __( 'Recommend articles relevant to a set of topics, excluding any post IDs already shown in the current conversation.', 'personalized-reader' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
 						'topics'      => array(
@@ -192,11 +211,15 @@ final class Abilities {
 							'type'  => 'array',
 							'items' => array( 'type' => 'integer' ),
 						),
-						'limit'       => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 10 ),
+						'limit'       => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+							'maximum' => 10,
+						),
 					),
 					'required'   => array( 'topics' ),
 				),
-				'output_schema' => array(
+				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'recommendations' => array(

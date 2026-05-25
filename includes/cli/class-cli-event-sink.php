@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class CLI_Event_Sink implements Event_Sink {
 
-	private bool $error  = false;
+	private bool $error = false;
 
 	private string $last_error = '';
 
@@ -53,15 +53,18 @@ final class CLI_Event_Sink implements Event_Sink {
 
 			case 'assistant_chunk':
 				// Write without a trailing newline so streamed chunks concatenate.
-				fwrite( STDOUT, (string) ( $data['text'] ?? '' ) );
+				// WP_Filesystem isn't appropriate for CLI stdout streaming.
+				fwrite( STDOUT, (string) ( $data['text'] ?? '' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- writing to CLI stdout, not the filesystem.
 				break;
 
 			case 'tool_call':
-				\WP_CLI::log( sprintf(
-					"\n→ tool_call %s %s",
-					(string) ( $data['name'] ?? '' ),
-					(string) wp_json_encode( $data['arguments'] ?? array() )
-				) );
+				\WP_CLI::log(
+					sprintf(
+						"\n→ tool_call %s %s",
+						(string) ( $data['name'] ?? '' ),
+						(string) wp_json_encode( $data['arguments'] ?? array() )
+					)
+				);
 				break;
 
 			case 'tool_result':
@@ -77,7 +80,7 @@ final class CLI_Event_Sink implements Event_Sink {
 
 	public function done(): void {
 		if ( ! $this->quiet ) {
-			fwrite( STDOUT, "\n— done —\n" );
+			fwrite( STDOUT, "\n— done —\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- writing to CLI stdout, not the filesystem.
 		}
 	}
 

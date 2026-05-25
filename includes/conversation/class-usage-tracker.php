@@ -103,10 +103,10 @@ final class Usage_Tracker {
 	private function bump( string $option, array $delta ): void {
 		$current = self::read( $option );
 		$updated = array(
-			'prompt_tokens'     => $current['prompt_tokens']     + $delta['prompt_tokens'],
+			'prompt_tokens'     => $current['prompt_tokens'] + $delta['prompt_tokens'],
 			'completion_tokens' => $current['completion_tokens'] + $delta['completion_tokens'],
-			'total_tokens'      => $current['total_tokens']      + $delta['total_tokens'],
-			'sessions'          => $current['sessions']          + $delta['sessions'],
+			'total_tokens'      => $current['total_tokens'] + $delta['total_tokens'],
+			'sessions'          => $current['sessions'] + $delta['sessions'],
 		);
 
 		// Use add_option for the first write (sets autoload=no) and

@@ -25,12 +25,19 @@ final class Event_Emitter implements Event_Sink {
 	}
 
 	public function emit( string $event, array $data ): void {
+		// Event names are always internal constants we control (turn_started,
+		// assistant_chunk, tool_call, tool_result, done, error). Sanitize to a
+		// token-safe charset belt-and-braces.
+		$event   = preg_replace( '/[^a-zA-Z0-9_]/', '', $event );
 		$payload = wp_json_encode( $data );
 		if ( false === $payload ) {
 			$payload = '{}';
 		}
-		echo 'event: ' . $event . "\n";
-		echo 'data: ' . $payload . "\n\n";
+		// SSE frames are text/event-stream, not HTML, so HTML escaping would
+		// corrupt the payload. The event name is already a sanitized token
+		// and the payload is JSON-encoded by wp_json_encode().
+		echo 'event: ' . $event . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SSE wire format; event name sanitized above.
+		echo 'data: ' . $payload . "\n\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SSE wire format; payload is wp_json_encode output.
 		$this->flush();
 	}
 
@@ -43,13 +50,16 @@ final class Event_Emitter implements Event_Sink {
 	}
 
 	private function flush(): void {
+		// SSE flushing is best-effort: ob_flush/flush emit warnings when no
+		// output buffer is active (perfectly normal for our usage), and we
+		// genuinely don't want those warnings to corrupt the event stream.
+		// Suppress is the right tool here, not error handling.
 		if ( function_exists( 'fastcgi_finish_request' ) ) {
-			// Avoid calling here — that would close the connection. Just flush.
-			@ob_flush();
-			@flush();
+			@ob_flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
+			@flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
 			return;
 		}
-		@ob_flush();
-		@flush();
+		@ob_flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
+		@flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
 	}
 }

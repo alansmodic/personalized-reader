@@ -26,12 +26,18 @@ final class Buffering_Event_Sink implements Event_Sink {
 	}
 
 	public function emit( string $event, array $data ): void {
-		$this->events[] = array( 'event' => $event, 'data' => $data );
+		$this->events[] = array(
+			'event' => $event,
+			'data'  => $data,
+		);
 	}
 
 	public function done(): void {
 		$this->done     = true;
-		$this->events[] = array( 'event' => 'done', 'data' => array() );
+		$this->events[] = array(
+			'event' => 'done',
+			'data'  => array(),
+		);
 	}
 
 	public function error( string $message, array $context = array() ): void {

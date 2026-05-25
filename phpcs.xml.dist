@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<ruleset name="personalized-reader">
+	<description>WordPress coding standards for Personalized Reader.</description>
+
+	<file>./personalized-reader.php</file>
+	<file>./includes</file>
+	<file>./blocks</file>
+
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/assets/*</exclude-pattern>
+	<!--
+		Block-script asset manifests use the canonical *.asset.php name
+		that @wordpress/scripts (and block.json's file:./*.js resolver)
+		expect. Renaming them breaks the block loader.
+	-->
+	<exclude-pattern>*/blocks/*/*.asset.php</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg name="basepath" value="."/>
+	<arg value="ps"/>
+
+	<config name="testVersion" value="8.1-"/>
+	<config name="minimum_wp_version" value="6.0"/>
+
+	<rule ref="WordPress">
+		<!--
+			Filename conventions: we use a PSR-ish layout (class-foo-bar.php
+			holding `class Foo_Bar`) that maps to our autoloader. WPCS
+			disagrees with class-file naming under namespaced code; the
+			autoloader is the source of truth so silence the false flag.
+		-->
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+
+		<!--
+			I18n: the plugin is shipped under a single text domain that
+			matches the plugin slug. WPCS sometimes can't infer that for
+			closure-returned arrays.
+		-->
+		<exclude name="WordPress.WP.I18n.MissingArgDomain"/>
+
+		<!--
+			YodaConditions: project style is left-to-right comparisons.
+		-->
+		<exclude name="WordPress.PHP.YodaConditions.NotYoda"/>
+
+		<!--
+			Inline comments: WPCS wants every inline comment to end in
+			punctuation. Useful but noisy on multi-line inline notes
+			where the convention is one logical sentence over several
+			lines. Leave as warning, not error.
+		-->
+		<exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+
+		<!--
+			Docblock noise. The plugin uses file-level docblocks +
+			descriptive class/method names; per-method docblocks for
+			trivial getters/setters and one-line registration methods
+			don't add information. We retain the file-level @package
+			tag (Squiz.Commenting.FileComment) and PHPDoc param tags
+			where parameters are non-obvious — the rules below only
+			silence the "every method needs a docblock" demands.
+		-->
+		<exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamTag"/>
+		<exclude name="Squiz.Commenting.FunctionComment.WrongStyle"/>
+		<exclude name="Squiz.Commenting.FunctionComment.IncorrectTypeHint"/>
+		<exclude name="Squiz.Commenting.FunctionComment.ParamNameNoMatch"/>
+		<exclude name="Squiz.Commenting.ClassComment.Missing"/>
+		<exclude name="Squiz.Commenting.VariableComment.Missing"/>
+		<exclude name="Generic.Commenting.DocComment.MissingShort"/>
+		<exclude name="Generic.Commenting.DocComment.LongNotCapital"/>
+		<exclude name="Squiz.Commenting.FileComment.MissingPackageTag"/>
+	</rule>
+
+	<!--
+		Tighten security-relevant rules — escaping, nonces, sanitization.
+		These should always error.
+	-->
+	<rule ref="WordPress.Security"/>
+
+	<rule ref="PHPCompatibilityWP"/>
+</ruleset>

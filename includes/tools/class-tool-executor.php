@@ -35,26 +35,41 @@ final class Tool_Executor implements WP_Agent_Tool_Executor {
 		$params = (array) ( $tool_call['parameters'] ?? array() );
 
 		if ( '' === $slug ) {
-			return array( 'success' => false, 'error' => 'missing_tool_name' );
+			return array(
+				'success' => false,
+				'error'   => 'missing_tool_name',
+			);
 		}
 
 		if ( ! function_exists( 'wp_get_ability' ) ) {
-			return array( 'success' => false, 'error' => 'abilities_api_unavailable' );
+			return array(
+				'success' => false,
+				'error'   => 'abilities_api_unavailable',
+			);
 		}
 
 		$ability = wp_get_ability( $slug );
 		if ( ! is_object( $ability ) || ! method_exists( $ability, 'execute' ) ) {
-			return array( 'success' => false, 'error' => 'unknown_ability:' . $slug );
+			return array(
+				'success' => false,
+				'error'   => 'unknown_ability:' . $slug,
+			);
 		}
 
 		try {
 			$result = $ability->execute( $params );
 		} catch ( \Throwable $e ) {
-			return array( 'success' => false, 'error' => $e->getMessage() );
+			return array(
+				'success' => false,
+				'error'   => $e->getMessage(),
+			);
 		}
 
 		if ( is_wp_error( $result ) ) {
-			return array( 'success' => false, 'error' => $result->get_error_message() );
+			return array(
+				'success' => false,
+				'error'   => $result->get_error_message(),
+			);
 		}
 
 		return array(

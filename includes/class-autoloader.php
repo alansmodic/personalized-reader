@@ -18,13 +18,13 @@ final class Autoloader {
 		spl_autoload_register( array( self::class, 'load' ) );
 	}
 
-	public static function load( string $class ): void {
+	public static function load( string $class_name ): void {
 		$prefix = __NAMESPACE__ . '\\';
-		if ( ! str_starts_with( $class, $prefix ) ) {
+		if ( ! str_starts_with( $class_name, $prefix ) ) {
 			return;
 		}
 
-		$relative = substr( $class, strlen( $prefix ) );
+		$relative = substr( $class_name, strlen( $prefix ) );
 		$parts    = explode( '\\', $relative );
 		$leaf     = array_pop( $parts );
 		$leaf     = 'class-' . strtolower( str_replace( '_', '-', $leaf ) ) . '.php';

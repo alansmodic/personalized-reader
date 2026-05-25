@@ -45,10 +45,10 @@ final class Reader_Agent {
 				),
 				'action_policy' => array(
 					'tools' => array(
-						'personalized-reader/search-archive'      => 'auto',
-						'personalized-reader/get-article'         => 'auto',
-						'personalized-reader/check-subscription'  => 'auto',
-						'personalized-reader/recommend'           => 'auto',
+						'personalized-reader/search-archive' => 'auto',
+						'personalized-reader/get-article' => 'auto',
+						'personalized-reader/check-subscription' => 'auto',
+						'personalized-reader/recommend'   => 'auto',
 					),
 				),
 				'meta'          => array(

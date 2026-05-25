@@ -53,7 +53,10 @@ final class Chat_Stream_Endpoint {
 		if ( empty( $wp->query_vars[ self::QUERY_VAR ] ) ) {
 			return;
 		}
-		if ( ( $_SERVER['REQUEST_METHOD'] ?? '' ) !== 'POST' ) {
+		$request_method = isset( $_SERVER['REQUEST_METHOD'] )
+			? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) )
+			: '';
+		if ( 'POST' !== $request_method ) {
 			status_header( 405 );
 			exit;
 		}
@@ -104,7 +107,12 @@ final class Chat_Stream_Endpoint {
 		// Surface the session token to the client even when it was just minted.
 		header( 'X-Personalized-Reader-Session: ' . $session_token );
 
-		@set_time_limit( 120 );
+		// Long-running streaming endpoint — extend the script timeout when
+		// the host permits it. set_time_limit is a no-op in safe_mode (or
+		// on hosts that disable it), which is fine; suppress is required
+		// because some configurations emit a warning instead of silently
+		// failing, and we cannot write to the stream from this branch.
+		@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
 		ignore_user_abort( false );
 
 		$runner = new Conversation_Runner(
@@ -127,7 +135,9 @@ final class Chat_Stream_Endpoint {
 		if ( '' !== $session_token ) {
 			return 'session:' . $session_token;
 		}
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+		$ip = isset( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: '';
 		return 'ip:' . $ip;
 	}
 }

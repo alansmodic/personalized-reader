@@ -24,22 +24,22 @@ defined( 'ABSPATH' ) || exit;
 
 final class Settings {
 
-	public const OPTION_NAME  = 'personalized_reader_settings';
+	public const OPTION_NAME = 'personalized_reader_settings';
 
 	public const OPTION_GROUP = 'personalized_reader_settings_group';
 
 	/** @var array<string, mixed> */
 	public const DEFAULTS = array(
-		'system_prompt'         => '',          // empty → use built-in default
-		'default_mode'          => 'inline',    // 'inline' | 'floating'
-		'placeholder'           => '',          // empty → use translated default
-		'widget_title'          => '',          // floating-mode header text
-		'free_articles'         => 3,
-		'max_tool_rounds'       => 4,
-		'rate_limit_per_minute' => 10,
-		'authority_opinion_cat' => 'opinion',   // category slug → opinion tier
-		'authority_wire_tags'   => 'wire,ap',   // comma-separated tag slugs → wire tier
-		'wpvdb_integration'     => true,        // auto-route search through WPVDB when present
+		'system_prompt'               => '',          // empty → use built-in default
+		'default_mode'                => 'inline',    // Allowed values: inline or floating.
+		'placeholder'                 => '',          // empty → use translated default
+		'widget_title'                => '',          // floating-mode header text
+		'free_articles'               => 3,
+		'max_tool_rounds'             => 4,
+		'rate_limit_per_minute'       => 10,
+		'authority_opinion_cat'       => 'opinion',   // category slug → opinion tier
+		'authority_wire_tags'         => 'wire,ap',   // comma-separated tag slugs → wire tier
+		'wpvdb_integration'           => true,        // auto-route search through WPVDB when present
 		// Price per million tokens (USD). Defaults track Anthropic's
 		// Claude Sonnet 4.5 ($3 input / $15 output). Edit these when
 		// you switch models — Opus and Haiku cost very differently.
@@ -100,7 +100,7 @@ final class Settings {
 		}
 
 		if ( array_key_exists( 'default_mode', $input ) ) {
-			$mode = (string) $input['default_mode'];
+			$mode                = (string) $input['default_mode'];
 			$out['default_mode'] = in_array( $mode, array( 'inline', 'floating' ), true ) ? $mode : 'inline';
 		}
 
@@ -129,7 +129,7 @@ final class Settings {
 		}
 
 		if ( array_key_exists( 'authority_wire_tags', $input ) ) {
-			$tags = array_map( 'sanitize_title', array_filter( array_map( 'trim', explode( ',', (string) $input['authority_wire_tags'] ) ) ) );
+			$tags                       = array_map( 'sanitize_title', array_filter( array_map( 'trim', explode( ',', (string) $input['authority_wire_tags'] ) ) ) );
 			$out['authority_wire_tags'] = implode( ',', $tags );
 		}
 

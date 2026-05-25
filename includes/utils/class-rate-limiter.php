@@ -35,7 +35,14 @@ final class Rate_Limiter {
 		$state = get_transient( $key );
 
 		if ( ! is_array( $state ) ) {
-			set_transient( $key, array( 'count' => 1, 'reset' => time() + $this->window_seconds ), $this->window_seconds );
+			set_transient(
+				$key,
+				array(
+					'count' => 1,
+					'reset' => time() + $this->window_seconds,
+				),
+				$this->window_seconds
+			);
 			return true;
 		}
 
@@ -43,7 +50,7 @@ final class Rate_Limiter {
 			return false;
 		}
 
-		$state['count']++;
+		++$state['count'];
 		// Preserve the original reset time — recompute TTL from it so the
 		// window doesn't slide on each write.
 		$ttl = max( 1, (int) $state['reset'] - time() );

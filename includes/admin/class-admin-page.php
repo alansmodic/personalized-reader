@@ -57,10 +57,12 @@ final class Admin_Page {
 			'wp-api-fetch',
 			sprintf(
 				'window.PersonalizedReaderAdmin = %s;',
-				(string) wp_json_encode( array(
-					'sendUrl' => rest_url( Chat_Controller::NAMESPACE_ROOT . '/send' ),
-					'nonce'   => wp_create_nonce( 'wp_rest' ),
-				) )
+				(string) wp_json_encode(
+					array(
+						'sendUrl' => rest_url( Chat_Controller::NAMESPACE_ROOT . '/send' ),
+						'nonce'   => wp_create_nonce( 'wp_rest' ),
+					)
+				)
 			),
 			'before'
 		);
@@ -265,10 +267,10 @@ final class Admin_Page {
 	public function field_number( string $key ): void {
 		$value = (int) Settings::get( $key );
 		printf(
-			'<input type="number" min="0" step="1" name="%s[%s]" value="%d" />',
+			'<input type="number" min="0" step="1" name="%s[%s]" value="%s" />',
 			esc_attr( Settings::OPTION_NAME ),
 			esc_attr( $key ),
-			$value
+			esc_attr( (string) $value )
 		);
 	}
 
@@ -447,8 +449,8 @@ final class Admin_Page {
 		$cost_out = (float) Settings::get( 'cost_completion_per_million' );
 
 		$estimate = static function ( array $bucket ) use ( $cost_in, $cost_out ): string {
-			$usd = ( (int) $bucket['prompt_tokens']     / 1_000_000 ) * $cost_in
-			     + ( (int) $bucket['completion_tokens'] / 1_000_000 ) * $cost_out;
+			$usd = ( (int) $bucket['prompt_tokens'] / 1_000_000 ) * $cost_in
+				+ ( (int) $bucket['completion_tokens'] / 1_000_000 ) * $cost_out;
 			// Show 4 decimals so single-turn pennies don't read as $0.00.
 			return '$' . number_format( $usd, 4, '.', ',' );
 		};
@@ -504,7 +506,7 @@ final class Admin_Page {
 		if ( function_exists( 'wp_get_ability' ) ) {
 			foreach ( Abilities::ABILITY_SLUGS as $slug ) {
 				if ( wp_get_ability( $slug ) ) {
-					$ability_count++;
+					++$ability_count;
 				}
 			}
 		}
@@ -553,8 +555,8 @@ final class Admin_Page {
 				// Informational only — the agent works fine without WPVDB.
 				// Mark as "ok" when present, "ok" (with a different detail
 				// string) when absent, so this never lights up red.
-				'ok'    => true,
-				'label' => __( 'WPVDB (semantic search)', 'personalized-reader' ),
+				'ok'     => true,
+				'label'  => __( 'WPVDB (semantic search)', 'personalized-reader' ),
 				'detail' => WPVDB_Backend::is_available()
 					? ( (bool) Settings::get( 'wpvdb_integration' )
 						? esc_html__( 'Detected and routed: search runs through the vector index.', 'personalized-reader' )

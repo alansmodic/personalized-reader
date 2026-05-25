@@ -45,83 +45,106 @@ final class Chat_Controller {
 	}
 
 	public function register_routes(): void {
-		register_rest_route( self::NAMESPACE_ROOT, '/session', array(
-			'methods'             => WP_REST_Server::CREATABLE,
-			'callback'            => array( $this, 'mint_session' ),
-			'permission_callback' => '__return_true',
-		) );
+		register_rest_route(
+			self::NAMESPACE_ROOT,
+			'/session',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'mint_session' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 
-		register_rest_route( self::NAMESPACE_ROOT, '/transcript', array(
-			'methods'             => WP_REST_Server::READABLE,
-			'callback'            => array( $this, 'transcript' ),
-			'permission_callback' => '__return_true',
-			'args'                => array(
-				'session_token' => array(
-					'required'          => true,
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
+		register_rest_route(
+			self::NAMESPACE_ROOT,
+			'/transcript',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'transcript' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'session_token' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
-			),
-		) );
+			)
+		);
 
-		register_rest_route( self::NAMESPACE_ROOT, '/clear', array(
-			'methods'             => WP_REST_Server::CREATABLE,
-			'callback'            => array( $this, 'clear' ),
-			'permission_callback' => '__return_true',
-			'args'                => array(
-				'session_token' => array(
-					'required'          => true,
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
+		register_rest_route(
+			self::NAMESPACE_ROOT,
+			'/clear',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'clear' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'session_token' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
-			),
-		) );
+			)
+		);
 
-		register_rest_route( self::NAMESPACE_ROOT, '/send', array(
-			'methods'             => WP_REST_Server::CREATABLE,
-			'callback'            => array( $this, 'send_fallback' ),
-			'permission_callback' => '__return_true',
-			'args'                => array(
-				'session_token' => array(
-					'required'          => false,
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
+		register_rest_route(
+			self::NAMESPACE_ROOT,
+			'/send',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'send_fallback' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'session_token' => array(
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'message'       => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_textarea_field',
+					),
+					'request_id'    => array(
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
-				'message'       => array(
-					'required'          => true,
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_textarea_field',
-				),
-				'request_id'    => array(
-					'required'          => false,
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
-				),
-			),
-		) );
+			)
+		);
 	}
 
 	public function mint_session( WP_REST_Request $request ): WP_REST_Response {
+		// $request is unused but required by the REST callback signature.
+		unset( $request );
 		$token = Transcript_Store::new_session_token();
-		return new WP_REST_Response( array(
-			'session_token' => $token,
-			'nonce'         => wp_create_nonce( Chat_Stream_Endpoint::NONCE_ACTION ),
-			'stream_url'    => home_url( '/personalized-reader/chat-stream' ),
-			'send_url'      => rest_url( self::NAMESPACE_ROOT . '/send' ),
-		), 200 );
+		return new WP_REST_Response(
+			array(
+				'session_token' => $token,
+				'nonce'         => wp_create_nonce( Chat_Stream_Endpoint::NONCE_ACTION ),
+				'stream_url'    => home_url( '/personalized-reader/chat-stream' ),
+				'send_url'      => rest_url( self::NAMESPACE_ROOT . '/send' ),
+			),
+			200
+		);
 	}
 
 	public function transcript( WP_REST_Request $request ): WP_REST_Response {
-		$session = (string) $request->get_param( 'session_token' );
-		$store   = new Transcript_Store();
+		$session  = (string) $request->get_param( 'session_token' );
+		$store    = new Transcript_Store();
 		$messages = $store->load( $session );
 
 		// Hide the system + tool rows from the UI — only user/assistant turns
 		// are reader-facing.
-		$visible = array_values( array_filter(
-			$messages,
-			static fn( $m ) => in_array( $m['role'] ?? '', array( 'user', 'assistant' ), true )
-		) );
+		$visible = array_values(
+			array_filter(
+				$messages,
+				static fn( $m ) => in_array( $m['role'] ?? '', array( 'user', 'assistant' ), true )
+			)
+		);
 
 		return new WP_REST_Response( array( 'messages' => $visible ), 200 );
 	}
@@ -165,13 +188,19 @@ final class Chat_Controller {
 			$sink,
 		);
 
-		@set_time_limit( 120 );
+		// Long-running REST endpoint — extend timeout best-effort. No-op
+		// on hosts that disable it; suppress so a warning can't leak into
+		// the JSON response.
+		@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- intentional; see above.
 		$runner->run( $session, $message, $request_id );
 
-		return new WP_REST_Response( array(
-			'session_token' => $session,
-			'events'        => $sink->events(),
-			'done'          => $sink->is_done(),
-		), 200 );
+		return new WP_REST_Response(
+			array(
+				'session_token' => $session,
+				'events'        => $sink->events(),
+				'done'          => $sink->is_done(),
+			),
+			200
+		);
 	}
 }

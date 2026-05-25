@@ -81,26 +81,30 @@ final class Conversation_Runner {
 		// Append the new user message as a substrate envelope. The
 		// substrate will normalize it on entry, but we keep the shape
 		// explicit so transcript dumps stay readable.
-		$history[] = WP_Agent_Message::text( 'user', $user_message, array(
-			'request_id' => $request_id,
-		) );
+		$history[] = WP_Agent_Message::text(
+			'user',
+			$user_message,
+			array(
+				'request_id' => $request_id,
+			)
+		);
 
-		$declarations  = $this->build_tool_declarations();
-		$executor      = new Tool_Executor();
-		$turn_runner   = $this->build_turn_runner();
-		$event_sink    = $this->build_event_sink_bridge();
+		$declarations = $this->build_tool_declarations();
+		$executor     = new Tool_Executor();
+		$turn_runner  = $this->build_turn_runner();
+		$event_sink   = $this->build_event_sink_bridge();
 
 		try {
 			$loop_result = WP_Agent_Conversation_Loop::run(
 				$history,
 				$turn_runner,
 				array(
-					'max_turns'            => (int) Settings::get( 'max_tool_rounds' ),
-					'tool_executor'        => $executor,
-					'tool_declarations'    => $declarations,
-					'transcript_persister' => $this->transcript,
-					'on_event'             => $event_sink,
-					'context'              => array(
+					'max_turns'             => (int) Settings::get( 'max_tool_rounds' ),
+					'tool_executor'         => $executor,
+					'tool_declarations'     => $declarations,
+					'transcript_persister'  => $this->transcript,
+					'on_event'              => $event_sink,
+					'context'               => array(
 						'session_token' => $session_token,
 						'request_id'    => $request_id,
 					),
@@ -109,15 +113,15 @@ final class Conversation_Runner {
 					// `transcript_lock_contention` and exits without
 					// generating — our event sink turns that into a clean
 					// error frame for the client.
-					'transcript_lock'        => new Conversation_Lock(),
-					'transcript_session_id'  => $session_token,
-					'transcript_lock_ttl'    => 120,
+					'transcript_lock'       => new Conversation_Lock(),
+					'transcript_session_id' => $session_token,
+					'transcript_lock_ttl'   => 120,
 					// Stop the loop the moment the model produces a plain
 					// text answer (no tool_calls). The substrate's default
 					// for mediation-enabled is "always continue" and relies
 					// on max_turns alone, which makes the model repeat its
 					// final answer N times.
-					'should_continue'      => static function ( array $result ): bool {
+					'should_continue'       => static function ( array $result ): bool {
 						return ! empty( $result['tool_calls'] ?? array() );
 					},
 				)
@@ -138,6 +142,11 @@ final class Conversation_Runner {
 		$events   = $this->events;
 
 		return static function ( array $messages, array $context ) use ( $composer, $events ): array {
+			// $context is the substrate-supplied turn context (session_token,
+			// request_id, turn number). Unused here — the runner only needs
+			// $messages to build the next prompt — but the callable signature
+			// is fixed by WP_Agent_Conversation_Loop.
+			unset( $context );
 			$history = self::envelopes_to_ai_messages( $messages );
 
 			// The latest user-side envelope becomes the prompt; everything
@@ -145,7 +154,10 @@ final class Conversation_Runner {
 			// past; the constructor argument is the new turn.
 			$prompt = array_pop( $history );
 			if ( null === $prompt ) {
-				return array( 'content' => '', 'tool_calls' => array() );
+				return array(
+					'content'    => '',
+					'tool_calls' => array(),
+				);
 			}
 
 			$builder = \wp_ai_client_prompt( $prompt )
@@ -158,7 +170,10 @@ final class Conversation_Runner {
 
 			$result = $builder->generate_text_result();
 			if ( is_wp_error( $result ) ) {
-				throw new \RuntimeException( $result->get_error_message() );
+				// Caught by our own try/finally; the message is surfaced via
+				// the Event_Sink, never rendered as raw HTML. esc_html covers
+				// the off-chance an exception propagates somewhere that does.
+				throw new \RuntimeException( esc_html( $result->get_error_message() ) );
 			}
 
 			$model_msg = $result->toMessage();
@@ -230,16 +245,22 @@ final class Conversation_Runner {
 					$events->emit( 'turn_started', array( 'round' => (int) ( $payload['turn'] ?? 0 ) ) );
 					break;
 				case 'tool_call':
-					$events->emit( 'tool_call', array(
-						'name'      => (string) ( $payload['tool_name'] ?? '' ),
-						'arguments' => (array) ( $payload['parameters'] ?? array() ),
-					) );
+					$events->emit(
+						'tool_call',
+						array(
+							'name'      => (string) ( $payload['tool_name'] ?? '' ),
+							'arguments' => (array) ( $payload['parameters'] ?? array() ),
+						)
+					);
 					break;
 				case 'tool_result':
-					$events->emit( 'tool_result', array(
-						'name'   => (string) ( $payload['tool_name'] ?? '' ),
-						'result' => (array) ( $payload['result'] ?? $payload ),
-					) );
+					$events->emit(
+						'tool_result',
+						array(
+							'name'   => (string) ( $payload['tool_name'] ?? '' ),
+							'result' => (array) ( $payload['result'] ?? $payload ),
+						)
+					);
 					break;
 				case 'failed':
 					$events->error( (string) ( $payload['error'] ?? 'turn_failed' ), $payload );
@@ -297,15 +318,15 @@ final class Conversation_Runner {
 	 * @return array<int, AiMessage>
 	 */
 	private static function envelopes_to_ai_messages( array $envelopes ): array {
-		$out          = array();
-		$pending_role = null;
+		$out           = array();
+		$pending_role  = null;
 		$pending_parts = array();
 
 		$flush = static function () use ( &$out, &$pending_role, &$pending_parts ): void {
 			if ( null === $pending_role || empty( $pending_parts ) ) {
 				return;
 			}
-			$out[] = 'assistant' === $pending_role
+			$out[]         = 'assistant' === $pending_role
 				? new ModelMessage( $pending_parts )
 				: new UserMessage( $pending_parts );
 			$pending_role  = null;

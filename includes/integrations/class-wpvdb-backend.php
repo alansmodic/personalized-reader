@@ -56,18 +56,18 @@ final class WPVDB_Backend {
 	}
 
 	/**
-	 * @param array|null $default Previous filter return; null to use built-in fallback.
+	 * @param array|null $prior Previous filter return; null to use built-in fallback.
 	 * @param array      $args    Search arguments (query, limit, date filters, authority, …).
 	 * @return array|null Results in our standard schema, or null to fall through.
 	 */
-	public function search( $default, array $args ) {
-		if ( null !== $default ) {
-			return $default;
+	public function search( $prior, array $args ) {
+		if ( null !== $prior ) {
+			return $prior;
 		}
 
 		$query = (string) ( $args['query'] ?? '' );
 		if ( '' === trim( $query ) ) {
-			return $default;
+			return $prior;
 		}
 
 		$limit = (int) ( $args['limit'] ?? 10 );
@@ -77,19 +77,19 @@ final class WPVDB_Backend {
 	}
 
 	/**
-	 * @param array|null $default
+	 * @param array|null         $prior
 	 * @param array<int, string> $topics
 	 * @param array<int, int>    $exclude_ids
 	 * @return array|null
 	 */
-	public function recommend( $default, array $topics, array $exclude_ids ) {
-		if ( null !== $default ) {
-			return $default;
+	public function recommend( $prior, array $topics, array $exclude_ids ) {
+		if ( null !== $prior ) {
+			return $prior;
 		}
 
 		$query = trim( implode( ' ', array_filter( array_map( 'strval', $topics ) ) ) );
 		if ( '' === $query ) {
-			return $default;
+			return $prior;
 		}
 
 		$posts = $this->wpvdb_query( $query, 5, $exclude_ids );
@@ -131,13 +131,13 @@ final class WPVDB_Backend {
 	}
 
 	/**
-	 * @param array<int, WP_Post>   $posts
-	 * @param array<string, mixed>  $args
+	 * @param array<int, WP_Post>  $posts
+	 * @param array<string, mixed> $args
 	 * @return array<int, array<string, mixed>>
 	 */
 	private function shape_results( array $posts, array $args ): array {
-		$out                = array();
-		$authority_filter   = (string) ( $args['authority'] ?? '' );
+		$out              = array();
+		$authority_filter = (string) ( $args['authority'] ?? '' );
 		foreach ( $posts as $post ) {
 			$authority = Abilities::classify_authority( $post );
 			if ( '' !== $authority_filter && 'any' !== $authority_filter && $authority !== $authority_filter ) {
