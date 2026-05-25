@@ -511,7 +511,9 @@ final class Admin_Page {
 			}
 		}
 
-		$agent_ok = function_exists( 'wp_get_agent' ) && wp_get_agent( 'personalized-reader' );
+		$agent_ok    = function_exists( 'wp_get_agent' ) && wp_get_agent( 'personalized-reader' );
+		$provider_ok = $this->is_ai_provider_ready();
+		$wpvdb_state = $this->wpvdb_state();
 
 		return array(
 			array(
@@ -552,6 +554,19 @@ final class Admin_Page {
 					: esc_html__( 'Agent not registered (Agents API likely unavailable).', 'personalized-reader' ),
 			),
 			array(
+				'ok'     => $provider_ok,
+				'label'  => __( 'AI provider configured', 'personalized-reader' ),
+				'detail' => $provider_ok
+					? esc_html__( 'A provider plugin has working credentials — text generation is supported.', 'personalized-reader' )
+					: wp_kses_post(
+						sprintf(
+						/* translators: %s: plugins.php URL */
+							__( 'No AI provider has credentials yet. Install <a href="https://wordpress.org/plugins/ai-provider-for-anthropic/" target="_blank" rel="noopener">ai-provider-for-anthropic</a> (or another provider for the WP AI client) and add your API key under <a href="%s">Plugins</a> → the provider\'s settings.', 'personalized-reader' ),
+							esc_url( admin_url( 'plugins.php' ) )
+						)
+					),
+			),
+			array(
 				// Informational only — the agent works fine without WPVDB.
 				// Mark as "ok" when present, "ok" (with a different detail
 				// string) when absent, so this never lights up red.
@@ -564,6 +579,115 @@ final class Admin_Page {
 					)
 					: esc_html__( 'Not installed. Search uses keyword WP_Query. Install Automattic/wpvdb for semantic ranking.', 'personalized-reader' ),
 			),
+			array(
+				'ok'     => $wpvdb_state['key_ok'],
+				'label'  => __( 'WPVDB embedding key', 'personalized-reader' ),
+				'detail' => $wpvdb_state['key_detail'],
+			),
+			array(
+				'ok'     => $wpvdb_state['embedded_ok'],
+				'label'  => __( 'Archive embedded', 'personalized-reader' ),
+				'detail' => $wpvdb_state['embedded_detail'],
+			),
+		);
+	}
+
+	/**
+	 * Probe the AI client for at least one usable text-generation provider.
+	 *
+	 * This is provider-agnostic: any provider plugin (ai-provider-for-anthropic,
+	 * OpenAI, etc.) that successfully registers with credentials will satisfy
+	 * isSupportedForTextGeneration(). When it returns false, the user has
+	 * either no provider installed or a provider installed but no API key.
+	 */
+	private function is_ai_provider_ready(): bool {
+		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
+			return false;
+		}
+		try {
+			$builder = wp_ai_client_prompt();
+			return (bool) $builder->isSupportedForTextGeneration();
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * WPVDB-specific state: is a key configured, has the archive been
+	 * embedded yet, and what should we tell the admin to do about it.
+	 *
+	 * All three rows skip cleanly when WPVDB isn't installed — both key
+	 * and embedded states return ok=true with a "not applicable" detail
+	 * so the panel never lights up red just because the user opted out
+	 * of semantic search.
+	 *
+	 * @return array{key_ok:bool, key_detail:string, embedded_ok:bool, embedded_detail:string}
+	 */
+	private function wpvdb_state(): array {
+		$wpvdb_available = WPVDB_Backend::is_available();
+		$wpvdb_admin_url = admin_url( 'admin.php?page=wpvdb' );
+
+		if ( ! $wpvdb_available ) {
+			$na = esc_html__( 'Not applicable — WPVDB is not installed.', 'personalized-reader' );
+			return array(
+				'key_ok'          => true,
+				'key_detail'      => $na,
+				'embedded_ok'     => true,
+				'embedded_detail' => $na,
+			);
+		}
+
+		// Embedding key: either set via define() in wp-config or stored in
+		// WPVDB's settings option. The constant wins at WPVDB's runtime, so
+		// check both.
+		$key_ok = defined( 'WPVDB_OPENAI_API_KEY' )
+			|| defined( 'WPVDB_AUTOMATTIC_API_KEY' );
+		if ( ! $key_ok && class_exists( '\\WPVDB\\Settings' ) && method_exists( '\\WPVDB\\Settings', 'get_api_key' ) ) {
+			$resolved = (string) \WPVDB\Settings::get_api_key();
+			$key_ok   = '' !== $resolved;
+		}
+
+		// Embedded archive: count rows. Cheap COUNT(*) — single index hit.
+		// Cached for 60s under a transient so reloading the settings page
+		// doesn't issue a fresh COUNT(*) each time.
+		global $wpdb;
+		$embedded_count = get_transient( 'pr_wpvdb_embedded_count' );
+		if ( false === $embedded_count ) {
+			$embedded_count = 0;
+			$table          = $wpdb->prefix . 'wpvdb_embeddings';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot existence check, cheap.
+			if ( $table_exists === $table ) {
+				$embedded_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wpvdb_embeddings" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- aggregate count over our own table; result cached via transient below.
+			}
+			set_transient( 'pr_wpvdb_embedded_count', (int) $embedded_count, MINUTE_IN_SECONDS );
+		}
+		$embedded_count = (int) $embedded_count;
+
+		return array(
+			'key_ok'          => $key_ok,
+			'key_detail'      => $key_ok
+				? esc_html__( 'Embedding API key is configured.', 'personalized-reader' )
+				: wp_kses_post(
+					sprintf(
+					/* translators: %s: WPVDB settings URL */
+						__( 'No embedding API key found. Add one in <a href="%s">WPVDB settings</a>, or define <code>WPVDB_OPENAI_API_KEY</code> in <code>wp-config.php</code>.', 'personalized-reader' ),
+						esc_url( $wpvdb_admin_url )
+					)
+				),
+			'embedded_ok'     => $embedded_count > 0,
+			'embedded_detail' => $embedded_count > 0
+				? sprintf(
+					/* translators: %d: embedding row count */
+					esc_html__( '%d embedding rows in wp_wpvdb_embeddings.', 'personalized-reader' ),
+					$embedded_count
+				)
+				: wp_kses_post(
+					sprintf(
+					/* translators: %s: WPVDB settings URL */
+						__( 'Archive has not been embedded yet. Trigger a re-embed job in <a href="%s">WPVDB settings</a> so semantic search has data to find.', 'personalized-reader' ),
+						esc_url( $wpvdb_admin_url )
+					)
+				),
 		);
 	}
 }
