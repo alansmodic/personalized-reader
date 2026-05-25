@@ -15,3 +15,6 @@
 node_modules/
 vendor/
 *.log
+
+# Composer cache (composer.lock IS committed — pinned dev tools)
+.composer/

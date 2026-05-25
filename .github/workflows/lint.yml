@@ -1,0 +1,80 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per ref. New pushes cancel in-flight runs on the same branch.
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.1 is the plugin's declared minimum; also exercise a current
+        # version so we notice when WordPress core's targeted releases
+        # introduce a deprecation.
+        php: ['8.1', '8.3']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer:v2, cs2pr
+          coverage: none
+
+      # Reuses ~/.composer/cache across runs. The lockfile is part of the
+      # cache key, so a dependency bump invalidates the cache automatically.
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            composer-${{ matrix.php }}-
+
+      - name: Install dev dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Syntax check (php -l)
+        run: |
+          set -e
+          # Walk every .php under tracked source dirs. xargs -P bounds
+          # parallelism so we still surface a clean failure when one file
+          # is broken (without -P, php -l is sequential and slow).
+          find personalized-reader.php includes blocks \
+            -name '*.php' -print0 \
+            | xargs -0 -n 1 -P 4 php -l
+
+      # cs2pr renders phpcs's checkstyle output as GitHub PR annotations,
+      # so violations show up inline on the diff rather than buried in
+      # the action log.
+      - name: WordPress Coding Standards
+        run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
+
+      - name: Validate block.json
+        run: |
+          php -r '
+            $f = "blocks/reader-chat/block.json";
+            $decoded = json_decode(file_get_contents($f), true, 512, JSON_THROW_ON_ERROR);
+            if (empty($decoded["name"]) || empty($decoded["apiVersion"])) {
+              fwrite(STDERR, "block.json missing name or apiVersion\n");
+              exit(1);
+            }
+            echo "block.json ok: " . $decoded["name"] . " (apiVersion " . $decoded["apiVersion"] . ")\n";
+          '

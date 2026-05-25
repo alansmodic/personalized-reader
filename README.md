@@ -338,12 +338,30 @@ not a new tab.
 ## Development
 
 ```bash
-# Lint
-find . -name '*.php' -not -path './.git/*' -exec php -l {} \;
+composer install            # one-time, installs phpcs + WPCS
+
+composer lint               # WordPress Coding Standards (errors fail)
+composer lint:fix           # auto-fix what phpcbf knows how to fix
+composer lint:syntax        # php -l across the tree
 
 # Validate block manifest
 php -r 'json_decode(file_get_contents("blocks/reader-chat/block.json"), true, 512, JSON_THROW_ON_ERROR);'
 ```
+
+`composer.lock` pins the dev-tool versions in-repo so CI installs are
+deterministic. The full ruleset lives in `phpcs.xml.dist`.
+
+### CI
+
+`.github/workflows/lint.yml` runs on every push to `main` and every PR:
+
+- `php -l` syntax check on PHP 8.1 and 8.3
+- `phpcs` against the WordPress + WordPress.Security + PHPCompatibilityWP
+  rulesets, annotating violations inline on the PR diff via `cs2pr`
+- `block.json` schema sanity check
+
+The matrix doubles up to catch deprecations that appear in later PHP
+versions but not in our minimum.
 
 ### Testing against a real WordPress site
 
