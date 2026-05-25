@@ -51,6 +51,13 @@ jobs:
       - name: Install dev dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
+      # composer audit checks the locked dev-tool versions against the
+      # composer.org advisories database. We pin phpcs + WPCS, so any
+      # disclosed CVE shows up here before it ships in a release. Default
+      # audits everything in composer.lock including dev packages.
+      - name: Composer security audit
+        run: composer audit --abandoned=report
+
       - name: Syntax check (php -l)
         run: |
           set -e
@@ -60,6 +67,18 @@ jobs:
           find personalized-reader.php includes blocks \
             -name '*.php' -print0 \
             | xargs -0 -n 1 -P 4 php -l
+
+      # node --check only validates parse-ability — no scope analysis,
+      # no unused-var checks. That's all we need for the hand-rolled
+      # vanilla JS in this plugin; introducing eslint would mean a
+      # node_modules build step we deliberately avoid.
+      - name: Syntax check (node --check)
+        run: |
+          set -e
+          for js in assets/js/widget.js blocks/reader-chat/edit.js; do
+            node --check "$js"
+            echo "ok: $js"
+          done
 
       # cs2pr renders phpcs's checkstyle output as GitHub PR annotations,
       # so violations show up inline on the diff rather than buried in

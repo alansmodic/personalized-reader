@@ -1,0 +1,77 @@
+name: Release
+
+# Trigger on annotated or lightweight tags shaped vX.Y.Z (and pre-release
+# variants like v1.0.0-beta.1). The matching ref is what determines the
+# release name and the asset's zip top-level directory.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  # Needed for creating the release + uploading the asset.
+  contents: write
+
+jobs:
+  build:
+    name: Build + publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # fetch-depth: 0 so git can resolve the tag's annotated message
+        # (used as the default release notes body).
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version + slug
+        id: vars
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          SLUG="personalized-reader"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "slug=$SLUG"       >> "$GITHUB_OUTPUT"
+          echo "asset=${SLUG}-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      # Sanity check: the plugin header's Version should match the tag.
+      # Better to fail here than ship a tag that disagrees with the
+      # version users see in wp-admin → Plugins.
+      - name: Verify plugin header version matches tag
+        run: |
+          set -e
+          HEADER_VERSION=$(grep -oE '^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*[^[:space:]]+' personalized-reader.php | awk '{print $NF}')
+          if [ "$HEADER_VERSION" != "${{ steps.vars.outputs.version }}" ]; then
+            echo "::error::Tag is v${{ steps.vars.outputs.version }} but plugin header says Version: $HEADER_VERSION. Update the header or retag."
+            exit 1
+          fi
+          echo "plugin header version $HEADER_VERSION matches tag"
+
+      # `git archive` honors .gitattributes export-ignore, so dev files
+      # (vendor/, .github/, composer.*, phpcs.*) are excluded automatically.
+      # --prefix gives the zip a top-level dir named exactly after the
+      # plugin, which is what WordPress's installer expects.
+      - name: Build distributable zip
+        run: |
+          set -e
+          git archive \
+            --format=zip \
+            --prefix="${{ steps.vars.outputs.slug }}/" \
+            --output="${{ steps.vars.outputs.asset }}" \
+            "$GITHUB_REF"
+          echo "--- zip contents (top level) ---"
+          unzip -l "${{ steps.vars.outputs.asset }}" | head -30
+
+      - name: Create release + attach asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          # --generate-notes pulls in the commit history since the last
+          # release for a serviceable default body; tag-message annotations
+          # win over it if provided.
+          gh release create "$GITHUB_REF_NAME" \
+            --title "${{ steps.vars.outputs.slug }} ${{ github.ref_name }}" \
+            --generate-notes \
+            "${{ steps.vars.outputs.asset }}"
