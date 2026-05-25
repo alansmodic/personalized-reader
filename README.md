@@ -1,5 +1,9 @@
 # Personalized Reader
 
+[![Latest release](https://img.shields.io/github/v/release/alansmodic/personalized-reader?label=release)](https://github.com/alansmodic/personalized-reader/releases/latest)
+[![Lint](https://github.com/alansmodic/personalized-reader/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/alansmodic/personalized-reader/actions/workflows/lint.yml)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
+
 A WordPress plugin that puts a conversational guide to your publication's archive
 in front of anonymous visitors. The reader asks questions in natural language;
 the agent searches the archive, summarizes findings, and links to source articles
@@ -9,9 +13,15 @@ Built on the WordPress [Agents API](https://github.com/Automattic/agents-api),
 the [Abilities API](https://github.com/WordPress/abilities-api) shipping in core,
 and the WordPress 7.0+ AI client.
 
-> **Status:** MVP. Pilot-ready for small publishers with a sample-archive backend.
-> Production deployments will want to wire a real semantic/vector backend via the
-> filters described below.
+**Current version:** `0.2.0` — [release notes](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.0)
+· [all releases](https://github.com/alansmodic/personalized-reader/releases)
+· [download zip](https://github.com/alansmodic/personalized-reader/releases/download/v0.2.0/personalized-reader-0.2.0.zip)
+
+> **Status:** pilot-ready for small publishers with a sample-archive backend.
+> Production deployments will want to wire a real semantic/vector backend via
+> the filters described below — or install
+> [WPVDB](https://github.com/Automattic/wpvdb) and the plugin picks it up
+> automatically.
 
 ---
 
@@ -514,6 +524,38 @@ the vector path is working.
 - **No "reset to defaults" button** in the admin form.
 
 ---
+
+## Releases
+
+Tagged releases live on the
+[Releases page](https://github.com/alansmodic/personalized-reader/releases).
+Each tag produces a `personalized-reader-X.Y.Z.zip` asset built by the
+release workflow — drop it straight into `wp-content/plugins/`.
+
+| Version | Highlights |
+|---|---|
+| [`v0.2.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.0) | Built-in WPVDB integration · 10-row smart status panel · SSE health probe + flush button · cost estimation · WPCS compliance + CI · markdown / spinner / ESC fixes |
+| [`v0.1.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.1.0) | Initial release. Four read-only abilities, multi-turn runtime over `WP_Agent_Conversation_Loop`, SSE + buffered REST + WP-CLI, block + shortcode + floating widget, admin settings page |
+
+### Cutting a release
+
+Version strings live in four places that must agree, plus the README:
+
+```bash
+NEW=0.3.0
+sed -i '' "s/Version:           0\\.[0-9]*\\.[0-9]*/Version:           $NEW/" personalized-reader.php
+sed -i '' "s/const VERSION     = '0\\.[0-9]*\\.[0-9]*';/const VERSION     = '$NEW';/" personalized-reader.php
+sed -i '' "s/'version'      => '0\\.[0-9]*\\.[0-9]*'/'version'      => '$NEW'/" blocks/reader-chat/edit.asset.php
+sed -i '' "s/\\*\\*Current version:\\*\\* \\`[0-9.]*\\`/\\*\\*Current version:\\*\\* \\`$NEW\\`/" README.md
+# Also update the README's Releases table by hand for the new entry.
+
+git add -A && git commit -m "Bump version to $NEW"
+git tag "v$NEW" -m "..."
+git push origin main "v$NEW"
+```
+
+The release workflow's `verify` step refuses to publish if the tag and
+the plugin-header version disagree, so a drift here fails fast.
 
 ## License
 
