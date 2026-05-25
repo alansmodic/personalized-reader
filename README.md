@@ -13,9 +13,9 @@ Built on the WordPress [Agents API](https://github.com/Automattic/agents-api),
 the [Abilities API](https://github.com/WordPress/abilities-api) shipping in core,
 and the WordPress 7.0+ AI client.
 
-**Current version:** `0.2.0` — [release notes](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.0)
+**Current version:** `0.2.1` — [release notes](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.1)
 · [all releases](https://github.com/alansmodic/personalized-reader/releases)
-· [download zip](https://github.com/alansmodic/personalized-reader/releases/download/v0.2.0/personalized-reader-0.2.0.zip)
+· [download zip](https://github.com/alansmodic/personalized-reader/releases/download/v0.2.1/personalized-reader-0.2.1.zip)
 
 > **Status:** pilot-ready for small publishers with a sample-archive backend.
 > Production deployments will want to wire a real semantic/vector backend via
@@ -534,8 +534,9 @@ release workflow — drop it straight into `wp-content/plugins/`.
 
 | Version | Highlights |
 |---|---|
-| [`v0.2.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.0) | Built-in WPVDB integration · 10-row smart status panel · SSE health probe + flush button · cost estimation · WPCS compliance + CI · markdown / spinner / ESC fixes |
-| [`v0.1.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.1.0) | Initial release. Four read-only abilities, multi-turn runtime over `WP_Agent_Conversation_Loop`, SSE + buffered REST + WP-CLI, block + shortcode + floating widget, admin settings page |
+| [`v0.2.1`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.1) | Automated release pipeline: dispatch from the Actions UI now bumps every version string in lockstep across the plugin, block asset, and README. Smoke release proving it works. |
+| [`v0.2.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.1) | Built-in WPVDB integration · 10-row smart status panel · SSE health probe + flush button · cost estimation · WPCS compliance + CI · markdown / spinner / ESC fixes |
+| [`v0.1.0`](https://github.com/alansmodic/personalized-reader/releases/tag/v0.2.1) | Initial release. Four read-only abilities, multi-turn runtime over `WP_Agent_Conversation_Loop`, SSE + buffered REST + WP-CLI, block + shortcode + floating widget, admin settings page |
 
 ### Cutting a release
 
