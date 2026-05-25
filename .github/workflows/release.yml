@@ -1,77 +1,203 @@
 name: Release
 
-# Trigger on annotated or lightweight tags shaped vX.Y.Z (and pre-release
-# variants like v1.0.0-beta.1). The matching ref is what determines the
-# release name and the asset's zip top-level directory.
+# Two trigger paths share the same job:
+#
+#   1. workflow_dispatch (primary)  — pick a version + write release
+#      highlights in the GitHub Actions UI; the workflow bumps every
+#      version string in the tree, commits to main, tags, builds, and
+#      publishes. No manual sed required.
+#
+#   2. push to a vX.Y.Z tag (fallback) — assumes the tag is on a
+#      commit where every version string is already correct. Used
+#      when you bumped by hand for any reason.
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version (e.g. 0.3.0). Do NOT include the v prefix.'
+        required: true
+        type: string
+      highlights:
+        description: 'One-line release highlights for the Releases table (markdown OK).'
+        required: false
+        type: string
+        default: ''
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+-*'
 
 permissions:
-  # Needed for creating the release + uploading the asset.
+  # Needed to push the bump commit + tag and create the release.
   contents: write
 
+# A single in-flight release run per repo. If you queue a dispatch
+# while a tag push is running, the dispatch waits — which is what we
+# want, never two writers racing on main.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  build:
+  release:
     name: Build + publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        # fetch-depth: 0 so git can resolve the tag's annotated message
-        # (used as the default release notes body).
         uses: actions/checkout@v4
         with:
+          # We push back to main from this workflow, so use a token
+          # that's persisted in the checkout's git config.
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Resolve version + slug
+      - name: Resolve version + paths
         id: vars
         run: |
           set -e
-          VERSION="${GITHUB_REF_NAME#v}"
-          SLUG="personalized-reader"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "slug=$SLUG"       >> "$GITHUB_OUTPUT"
-          echo "asset=${SLUG}-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            # semver-ish — accept X.Y.Z + optional -prerelease suffix.
+            if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$'; then
+              echo "::error::Version '$VERSION' is not valid semver"
+              exit 1
+            fi
+            # Refuse to re-release an existing tag.
+            if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+              echo "::error::Tag v$VERSION already exists. Pick a new version or delete the tag first."
+              exit 1
+            fi
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION"             >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"                >> "$GITHUB_OUTPUT"
+          echo "slug=personalized-reader"     >> "$GITHUB_OUTPUT"
+          echo "asset=personalized-reader-$VERSION.zip" >> "$GITHUB_OUTPUT"
 
-      # Sanity check: the plugin header's Version should match the tag.
-      # Better to fail here than ship a tag that disagrees with the
-      # version users see in wp-admin → Plugins.
-      - name: Verify plugin header version matches tag
+      # The "bump everything" step. Touches four files in lockstep:
+      #   * personalized-reader.php — plugin-header Version line + VERSION const
+      #   * blocks/reader-chat/edit.asset.php — block-script asset version
+      #   * README.md — Current-version line, current-release links,
+      #                 and a new Releases-table row
+      # Python is used over sed because the README rewrite needs
+      # multi-line insertion that BSD/GNU sed disagree about.
+      - name: Bump version files (dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          NEW_VERSION: ${{ steps.vars.outputs.version }}
+          HIGHLIGHTS:  ${{ inputs.highlights }}
         run: |
           set -e
-          HEADER_VERSION=$(grep -oE '^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*[^[:space:]]+' personalized-reader.php | awk '{print $NF}')
-          if [ "$HEADER_VERSION" != "${{ steps.vars.outputs.version }}" ]; then
-            echo "::error::Tag is v${{ steps.vars.outputs.version }} but plugin header says Version: $HEADER_VERSION. Update the header or retag."
+          python3 <<'PY'
+          import os, re
+
+          v   = os.environ['NEW_VERSION']
+          hl  = os.environ.get('HIGHLIGHTS', '').strip()
+          tag = f'v{v}'
+
+          # --- personalized-reader.php ---
+          p = 'personalized-reader.php'
+          s = open(p).read()
+          s = re.sub(r'(\*\s*Version:\s*)\S+', r'\g<1>' + v, s, count=1)
+          s = re.sub(r"const VERSION\s*=\s*'[^']+';",
+                     f"const VERSION     = '{v}';", s, count=1)
+          open(p, 'w').write(s)
+
+          # --- blocks/reader-chat/edit.asset.php ---
+          p = 'blocks/reader-chat/edit.asset.php'
+          s = open(p).read()
+          s = re.sub(r"'version'\s*=>\s*'[^']+'",
+                     f"'version'      => '{v}'", s, count=1)
+          open(p, 'w').write(s)
+
+          # --- README.md ---
+          p = 'README.md'
+          s = open(p).read()
+
+          # Current-version line.
+          s = re.sub(r'\*\*Current version:\*\* `[^`]+`',
+                     f'**Current version:** `{v}`', s, count=1)
+          # Link to the new tag's release notes.
+          s = re.sub(r'releases/tag/v[0-9][0-9A-Za-z.\-]*\)',
+                     f'releases/tag/{tag})', s)
+          # Direct-zip-download link (anchor + filename both move).
+          s = re.sub(r'releases/download/v[0-9][0-9A-Za-z.\-]*/personalized-reader-[0-9][0-9A-Za-z.\-]*\.zip',
+                     f'releases/download/{tag}/personalized-reader-{v}.zip', s)
+          # Prepend a row to the Releases table (after the header rule).
+          if not hl:
+              hl = f'See [release notes](https://github.com/alansmodic/personalized-reader/releases/tag/{tag}).'
+          header  = '| Version | Highlights |\n|---|---|\n'
+          new_row = f'| [`{tag}`](https://github.com/alansmodic/personalized-reader/releases/tag/{tag}) | {hl} |\n'
+          s = s.replace(header, header + new_row, 1)
+          open(p, 'w').write(s)
+
+          print(f'bumped to {v}')
+          PY
+
+      - name: Commit + tag (dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          V: ${{ steps.vars.outputs.version }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          set -e
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add personalized-reader.php blocks/reader-chat/edit.asset.php README.md
+          git commit -m "Bump version to $V"
+          git tag "$TAG" -m "$TAG"
+          # Push the bump commit + tag together so an observer never
+          # sees the tag without the bump.
+          git push origin HEAD:main "$TAG"
+
+      # Header-version-matches-tag guard. Runs on both trigger paths
+      # — for dispatch this is belt-and-suspenders (the bump step
+      # just wrote the value); for tag-push it catches bumping drift.
+      - name: Verify plugin header matches tag
+        env:
+          V: ${{ steps.vars.outputs.version }}
+        run: |
+          set -e
+          HEADER=$(grep -oE '^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*[^[:space:]]+' personalized-reader.php | awk '{print $NF}')
+          if [ "$HEADER" != "$V" ]; then
+            echo "::error::Tag is v$V but plugin header says Version: $HEADER. Update the header or retag."
             exit 1
           fi
-          echo "plugin header version $HEADER_VERSION matches tag"
+          echo "plugin header version $HEADER matches tag"
 
       # `git archive` honors .gitattributes export-ignore, so dev files
-      # (vendor/, .github/, composer.*, phpcs.*) are excluded automatically.
-      # --prefix gives the zip a top-level dir named exactly after the
-      # plugin, which is what WordPress's installer expects.
+      # are excluded automatically. We archive the tag explicitly (not
+      # GITHUB_REF, which on workflow_dispatch is the branch, not a
+      # tag) so both trigger paths produce identical artifacts.
       - name: Build distributable zip
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+          SLUG: ${{ steps.vars.outputs.slug }}
+          ASSET: ${{ steps.vars.outputs.asset }}
         run: |
           set -e
+          # When the bump step just ran, the local tag exists but the
+          # checkout doesn't have it as a ref object the way a
+          # fresh-from-remote checkout would — refresh first.
+          git fetch --tags origin
           git archive \
             --format=zip \
-            --prefix="${{ steps.vars.outputs.slug }}/" \
-            --output="${{ steps.vars.outputs.asset }}" \
-            "$GITHUB_REF"
-          echo "--- zip contents (top level) ---"
-          unzip -l "${{ steps.vars.outputs.asset }}" | head -30
+            --prefix="$SLUG/" \
+            --output="$ASSET" \
+            "$TAG"
+          echo "--- zip top level ---"
+          unzip -l "$ASSET" | head -20
 
       - name: Create release + attach asset
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG:   ${{ steps.vars.outputs.tag }}
+          SLUG:  ${{ steps.vars.outputs.slug }}
+          ASSET: ${{ steps.vars.outputs.asset }}
         run: |
           set -e
-          # --generate-notes pulls in the commit history since the last
-          # release for a serviceable default body; tag-message annotations
-          # win over it if provided.
-          gh release create "$GITHUB_REF_NAME" \
-            --title "${{ steps.vars.outputs.slug }} ${{ github.ref_name }}" \
+          gh release create "$TAG" \
+            --title "$SLUG $TAG" \
             --generate-notes \
-            "${{ steps.vars.outputs.asset }}"
+            "$ASSET"

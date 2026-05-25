@@ -539,15 +539,41 @@ release workflow — drop it straight into `wp-content/plugins/`.
 
 ### Cutting a release
 
-Version strings live in four places that must agree, plus the README:
+**Recommended path — via the Actions UI.**
+
+1. Open the [Release workflow](https://github.com/alansmodic/personalized-reader/actions/workflows/release.yml)
+2. Click **Run workflow** (top right)
+3. Fill in **version** (e.g. `0.3.0`, no `v` prefix) and **highlights**
+   (one line of markdown, e.g. `Adds X · fixes Y`)
+4. Click **Run workflow**
+
+The job:
+
+- Validates the version is well-formed semver and not already tagged
+- Rewrites every version string in lockstep across
+  `personalized-reader.php`, `blocks/reader-chat/edit.asset.php`,
+  and `README.md` (current-version line + release links + a new
+  row prepended to the Releases table)
+- Commits the bump as `github-actions[bot]`, tags `vX.Y.Z`, pushes
+  both to `main`
+- Verifies the plugin header matches the tag (belt-and-suspenders)
+- Builds `personalized-reader-X.Y.Z.zip` via `git archive` and
+  attaches it to the auto-generated GitHub release
+
+Total time from clicking the button to a published release: ~30s.
+
+**Fallback — manual sed, then push a tag.**
+
+If you ever need to bypass the dispatch UI (a forked release, a
+hotfix on a branch, anything weird):
 
 ```bash
 NEW=0.3.0
-sed -i '' "s/Version:           0\\.[0-9]*\\.[0-9]*/Version:           $NEW/" personalized-reader.php
-sed -i '' "s/const VERSION     = '0\\.[0-9]*\\.[0-9]*';/const VERSION     = '$NEW';/" personalized-reader.php
-sed -i '' "s/'version'      => '0\\.[0-9]*\\.[0-9]*'/'version'      => '$NEW'/" blocks/reader-chat/edit.asset.php
-sed -i '' "s/\\*\\*Current version:\\*\\* \\`[0-9.]*\\`/\\*\\*Current version:\\*\\* \\`$NEW\\`/" README.md
-# Also update the README's Releases table by hand for the new entry.
+sed -i '' "s/Version:           [0-9][0-9A-Za-z.-]*/Version:           $NEW/" personalized-reader.php
+sed -i '' "s/const VERSION     = '[0-9][0-9A-Za-z.-]*'/const VERSION     = '$NEW'/" personalized-reader.php
+sed -i '' "s/'version'      => '[0-9][0-9A-Za-z.-]*'/'version'      => '$NEW'/" blocks/reader-chat/edit.asset.php
+sed -i '' "s/\\*\\*Current version:\\*\\* \`[0-9.]*\`/\\*\\*Current version:\\*\\* \`$NEW\`/" README.md
+# Update the Releases table by hand for this case.
 
 git add -A && git commit -m "Bump version to $NEW"
 git tag "v$NEW" -m "..."
