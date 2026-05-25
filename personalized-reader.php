@@ -3,7 +3,7 @@
  * Plugin Name:       Personalized Reader
  * Plugin URI:        https://github.com/alansmodic/personalized-reader
  * Description:       Conversational reader agent that helps anonymous visitors discover and navigate the publication archive. Built on the Agents API + Abilities API.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 7.0
  * Requires PHP:      8.1
  * Author:            Alan Smodic
@@ -21,7 +21,7 @@ namespace PersonalizedReader;
 
 defined( 'ABSPATH' ) || exit;
 
-const VERSION     = '0.1.0';
+const VERSION     = '0.2.0';
 const PLUGIN_FILE = __FILE__;
 const PLUGIN_DIR  = __DIR__;
 const TEXT_DOMAIN = 'personalized-reader';
